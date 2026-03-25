@@ -25,6 +25,7 @@ jobs:
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_PROJECT_URL: ${{ vars.SUPABASE_PROJECT_URL || secrets.SUPABASE_PROJECT_URL }}
       PUBLIC_SITE_ORIGIN: ${{ vars.PUBLIC_SITE_ORIGIN || secrets.PUBLIC_SITE_ORIGIN }}
     steps:
       - name: Checkout
@@ -36,12 +37,17 @@ jobs:
           version: latest
 
       - name: Validate required Supabase settings
+        id: validate
         shell: bash
         run: |
           test -n "$SUPABASE_ACCESS_TOKEN" || (echo "Missing SUPABASE_ACCESS_TOKEN" && exit 1)
           test -n "$SUPABASE_DB_PASSWORD" || (echo "Missing SUPABASE_DB_PASSWORD" && exit 1)
           test -n "$SUPABASE_DB_URL" || (echo "Missing SUPABASE_DB_URL" && exit 1)
-          test -n "$SUPABASE_PROJECT_REF" || (echo "Missing SUPABASE_PROJECT_REF" && exit 1)
+          if [ -z "$SUPABASE_PROJECT_REF" ] && [ -n "$SUPABASE_PROJECT_URL" ]; then
+            SUPABASE_PROJECT_REF="$(printf '%s' "$SUPABASE_PROJECT_URL" | sed -E 's#^.*/project/([a-z0-9]+).*$#\1#')"
+          fi
+          test -n "$SUPABASE_PROJECT_REF" || (echo "Missing SUPABASE_PROJECT_REF or SUPABASE_PROJECT_URL" && exit 1)
+          echo "project_ref=$SUPABASE_PROJECT_REF" >> "$GITHUB_OUTPUT"
 
       - name: Push database migrations
         run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all
@@ -50,10 +56,10 @@ jobs:
         shell: bash
         run: |
           if [ -n "$PUBLIC_SITE_ORIGIN" ]; then
-            supabase secrets set ALLOWED_ORIGIN="$PUBLIC_SITE_ORIGIN" --project-ref "$SUPABASE_PROJECT_REF"
+            supabase secrets set ALLOWED_ORIGIN="$PUBLIC_SITE_ORIGIN" --project-ref "${{ steps.validate.outputs.project_ref }}"
           else
             echo "PUBLIC_SITE_ORIGIN is empty. Skipping ALLOWED_ORIGIN secret sync."
           fi
 
       - name: Deploy Edge Function
-        run: supabase functions deploy warehouse-api --project-ref "$SUPABASE_PROJECT_REF"
+        run: supabase functions deploy warehouse-api --project-ref "${{ steps.validate.outputs.project_ref }}"
