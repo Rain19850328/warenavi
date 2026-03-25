@@ -1,0 +1,4 @@
+project_id = "warenavi"
+
+[functions.warehouse-api]
+verify_jwt = false

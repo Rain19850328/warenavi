@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CF_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
+      PUBLIC_API_BASE: ${{ vars.PUBLIC_API_BASE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,6 +32,16 @@ jobs:
           else
             echo "name=${GITHUB_REPOSITORY#*/}" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Write frontend runtime config
+        shell: bash
+        run: |
+          API_BASE_VALUE="${PUBLIC_API_BASE:-/api}"
+          cat > web/config.js <<EOF
+          window.APP_CONFIG = window.APP_CONFIG || {
+            API_BASE: "${API_BASE_VALUE}",
+          };
+          EOF
 
       - name: Deploy web/ to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

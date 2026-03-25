@@ -1,5 +1,5 @@
 // app.js — stable build with autocomplete & results list (v20250825-06)
-const API_BASE = '/api';
+const API_BASE = (window.APP_CONFIG && window.APP_CONFIG.API_BASE) || '/api';
 const sel = s => document.querySelector(s);
 const fmtM3 = cm3 => (cm3/1_000_000).toFixed(2) + ' m³';
 

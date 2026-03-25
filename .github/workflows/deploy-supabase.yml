@@ -1,0 +1,52 @@
+name: Deploy Supabase Backend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "supabase/**"
+      - ".github/workflows/deploy-supabase.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      PUBLIC_SITE_ORIGIN: ${{ vars.PUBLIC_SITE_ORIGIN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link Supabase project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Push database migrations
+        run: supabase db push --linked --include-all
+
+      - name: Sync Edge Function secrets
+        shell: bash
+        run: |
+          if [ -n "$PUBLIC_SITE_ORIGIN" ]; then
+            supabase secrets set ALLOWED_ORIGIN="$PUBLIC_SITE_ORIGIN" --project-ref "$SUPABASE_PROJECT_REF"
+          else
+            echo "PUBLIC_SITE_ORIGIN is empty. Skipping ALLOWED_ORIGIN secret sync."
+          fi
+
+      - name: Deploy Edge Function
+        run: supabase functions deploy warehouse-api --project-ref "$SUPABASE_PROJECT_REF"
