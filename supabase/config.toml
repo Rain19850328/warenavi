@@ -1,4 +1,5 @@
 project_id = "warenavi"
+# Trigger backend deployment workflow after secret updates.
 
 [functions.warehouse-api]
 verify_jwt = false
