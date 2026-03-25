@@ -12,6 +12,7 @@
 Repository secrets:
 - `SUPABASE_ACCESS_TOKEN`
 - `SUPABASE_DB_PASSWORD`
+- `SUPABASE_DB_URL`
 - `SUPABASE_PROJECT_REF` (optional fallback if not stored as variable)
 - `PUBLIC_SITE_ORIGIN` (optional fallback if not stored as variable)
 
@@ -26,11 +27,13 @@ Repository variables:
   예: `https://warenavi.pages.dev`
 - `PUBLIC_API_BASE`: Supabase Edge Function 기본 주소
   예: `https://<project-ref>.supabase.co/functions/v1/warehouse-api`
+- `SUPABASE_DB_URL`: Supabase의 Session Pooler 연결 문자열
+  예: `postgresql://postgres.<project-ref>:[PASSWORD]@aws-0-<region>.pooler.supabase.com:5432/postgres`
 
 ## 배포 흐름
 
 1. `main` 브랜치에 `supabase/**` 변경사항을 push합니다.
-2. GitHub Actions가 Supabase CLI로 프로젝트를 link 합니다.
+2. GitHub Actions가 Session Pooler DB URL로 원격 Postgres에 연결합니다.
 3. `supabase/migrations`의 SQL을 원격 Postgres에 적용합니다.
 4. `warehouse-api` Edge Function을 배포합니다.
 5. 프론트 Cloudflare Pages 워크플로는 `PUBLIC_API_BASE`를 읽어 `web/config.js`를 생성하고 배포합니다.
