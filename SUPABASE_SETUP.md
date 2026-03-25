@@ -12,6 +12,8 @@
 Repository secrets:
 - `SUPABASE_ACCESS_TOKEN`
 - `SUPABASE_DB_PASSWORD`
+- `SUPABASE_PROJECT_REF` (optional fallback if not stored as variable)
+- `PUBLIC_SITE_ORIGIN` (optional fallback if not stored as variable)
 
 Repository variables:
 - `SUPABASE_PROJECT_REF`
