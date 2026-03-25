@@ -1,0 +1,250 @@
+
+/* =======================================================
+   Warehouse PWA — Unified Stylesheet (clean rebuild)
+   - Rack grid with sticky header/label
+   - Compact columns, aligned column titles
+   - Detail panel table (small)
+   - Inbound/Outbound/Move dialogs (unified)
+   ======================================================= */
+
+/* ---------- Base / Layout ---------- */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans KR, Apple SD Gothic Neo, "맑은 고딕", sans-serif;
+  color: #0f172a;
+  background: #fff;
+}
+.container { max-width: 1280px; margin: 0 auto; padding: 12px; }
+
+/* ---------- Toolbar (3 rows) ---------- */
+.toolbar { display: grid; gap: 6px; margin-bottom: 10px; }
+.toolbar .line { display: flex; align-items: center; gap: 10px; }
+.toolbar .line-search input[type="text"]{
+  flex: 1 1 auto; min-width: 0;
+  height: 36px; padding: 0 10px;
+  border: 1px solid #cbd5e1; border-radius: 10px;
+}
+.toolbar .line-actions .spacer{ flex: 1; }
+.toolbar button{
+  height: 34px; padding: 0 12px;
+  border: 1px solid #e2e8f0; border-radius: 10px;
+  background: #f8fafc; cursor: pointer; font-weight: 600;
+}
+.toolbar button.ghost{ background: #fff; }
+
+/* ---------- Legend ---------- */
+.legend{ display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.legend .entry{ display: inline-flex; gap: 6px; align-items: center; }
+.legend .sw{
+  width: 18px; height: 18px; border-radius: 4px; border: 1px solid #cbd5e1;
+}
+.legend .label{ font-size: 12px; color: #334155; }
+
+/* ---------- Rack ---------- */
+.rackBox{ border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; overflow: hidden; }
+.rackScroll{ position: relative; overflow: auto; max-height: min(70vh, 760px); }
+
+/* Header row with column titles (numbers) */
+.gridHeader{
+  position: sticky; top: 0; z-index: 5;
+  display: grid;
+  column-gap: 8px;
+  background: linear-gradient(180deg,#ffffffcc 0%, #ffffff 55%, #f8fafc 100%);
+  border-bottom: 1px solid #e2e8f0;
+  padding: 6px 8px;
+}
+
+/* Column header chip (typography = same as floor labels) */
+.gridHeader .colHeader{
+  display: flex; align-items: center; justify-content: center;
+  height: 30px;
+  font-weight: 600;               /* same as level label */
+  font-size: 13px; color: #334155;/* same as level label */
+  background: #fff;
+  border: 1px solid #e2e8f0; border-radius: 10px;
+  box-shadow: 0 1px 1px rgba(15,23,42,.06);
+  user-select: none;
+}
+.gridHeader .colHeader.spacer{ visibility: hidden; border:0; background: transparent; box-shadow: none; }
+
+/* Grid: columns flow left→right with compact width */
+.grid{
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--bay-width, 92px); /* compact columns */
+  column-gap: 8px;
+  padding: 8px;
+  align-items: start;
+}
+
+/* Each column (bay) */
+.bay{ display: flex; flex-direction: column; gap: 8px; }
+.bay.labels{
+  position: sticky; left: 0; z-index: 4;
+  background: linear-gradient(90deg, #ffffff, #ffffff 70%, #ffffffcc);
+  border-right: 1px solid #e2e8f0;
+  grid-auto-rows: 1fr;
+}
+
+/* Cell box (floor cell) */
+.cell{
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  border-radius: 10px;
+  min-height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.cell.selected{ outline: 2px solid #0ea5e9; outline-offset: -2px; }
+.cell .rate{
+  font-size: 13px;
+  font-weight: 500; /* not too bold */
+  color: #0f172a;
+}
+
+/* Floor labels (left sticky column) */
+.levelLabel{ background: #fff; }
+.levelLabel .txt{
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+/* ---------- Detail panel ---------- */
+.detail{ margin-top: 10px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #fff; }
+.detail-header{ padding: 10px 12px; border-bottom: 1px solid #e2e8f0; }
+.detail-header h3{ margin: 0 0 6px 0; font-size: 16px; }
+.detail-header .muted, #selStats{ font-size: 12px; line-height: 1.3; color: #475569; }
+.bar{ height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+.bar .bar-fill{ height: 100%; background: linear-gradient(90deg,#60a5fa,#22d3ee); }
+
+.detail-body{ max-height: min(36vh, 420px); overflow: auto; }
+#tblItems{ width: 100%; border-collapse: collapse; font-size: 13px; }
+#tblItems thead th{
+  position: sticky; top: 0;
+  text-align: left;
+  font-size: 12px; font-weight: 600;
+  background: #f1f5f9; color: #334155;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 6px 10px;
+}
+#tblItems td{ padding: 6px 10px; border-bottom: 1px solid #e2e8f0; }
+#tblItems tbody tr.sel{ background: #e0f2fe; }
+
+.detail-actions{ display: flex; gap: 10px; padding: 10px 12px; border-top: 1px solid #e2e8f0; }
+.detail-actions .btn,
+.detail-actions button{
+  appearance: none; border: 1px solid #e2e8f0; cursor: pointer;
+  padding: 10px 14px; border-radius: 12px;
+  font-weight: 700; letter-spacing: .2px;
+  background: #f8fafc; color: #0f172a;
+  box-shadow: 0 1px 1px rgba(0,0,0,.06);
+  transition: transform .05s ease, filter .15s ease;
+}
+.detail-actions .btn:hover,
+.detail-actions button:hover{ filter: brightness(.98); }
+.detail-actions .btn:active,
+.detail-actions button:active{ transform: translateY(1px); }
+
+/* Outbound (warn tone) */
+#btnOutbound,
+#btnMove{ /* Move = Outbound style (same tone) */
+  color: #7c2d12;
+  background: linear-gradient(180deg,#fed7aa,#fdba74);
+  border: 1px solid #f59e0b;
+}
+
+/* ---------- Dialogs: unified modal styling ---------- */
+dialog{
+  border: 0; padding: 0;
+  width: min(740px, calc(100vw - 32px));
+  max-height: min(80vh, 680px);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(2,8,23,.15), 0 2px 8px rgba(2,8,23,.08);
+}
+dialog::backdrop{
+  background: rgba(2,6,23,.35);
+  backdrop-filter: blur(2px);
+}
+dialog > .dialog{
+  display: grid; grid-template-rows: auto 1fr auto;
+  background: #fff; border-radius: 16px;
+}
+dialog > .dialog > h3{
+  margin: 0; padding: 14px 16px;
+  font-size: 18px; font-weight: 700; color: #0f172a;
+  border-bottom: 1px solid #e2e8f0;
+}
+dialog .row{
+  display: flex; gap: 10px; align-items: center;
+  padding: 12px 16px;
+}
+dialog .row + .row{ border-top: 1px solid #f1f5f9; }
+
+dialog input[type="text"],
+dialog input[type="number"]{
+  height: 36px; border: 1px solid #cbd5e1; border-radius: 10px;
+  padding: 0 10px; font-size: 14px; outline: none;
+}
+dialog input[type="text"]:focus,
+dialog input[type="number"]:focus{
+  border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56,189,248,.25);
+}
+
+/* Inbound list */
+dialog .list{
+  margin: 8px 16px 12px 16px;
+  border: 1px solid #e2e8f0; border-radius: 12px;
+  padding: 8px; max-height: 42vh; overflow: auto; background: #fff;
+}
+dialog .list .item{
+  display: grid; grid-template-columns: 140px 1fr;
+  gap: 12px; align-items: start;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0; border-radius: 10px;
+  background: #fff; cursor: pointer;
+}
+dialog .list .item + .item{ margin-top: 6px; }
+dialog .list .item:hover{ background: #f8fafc; }
+dialog .list .item.sel{ outline: 2px solid #38bdf8; outline-offset: 1px; background: #e0f2fe; }
+
+dialog .list .item .sku{ font-size: 13px; line-height: 1.2; word-break: break-word; }
+dialog .list .item .loc{ font-size: 12px; color: #64748b; margin-top: 2px; word-break: break-all; }
+dialog .list .item .name{ font-size: 14px; line-height: 1.35; color: #0f172a; overflow: hidden; text-overflow: ellipsis; }
+
+/* Footer row: left labels + right buttons */
+dialog .row:last-child{
+  display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center;
+}
+dialog button{
+  height: 36px; padding: 0 12px;
+  border-radius: 10px; border: 1px solid #e2e8f0;
+  background: #f8fafc; font-weight: 600; color: #0f172a;
+  cursor: pointer; transition: filter .15s ease, transform .05s ease;
+}
+dialog button:hover{ filter: brightness(.98); }
+dialog button:active{ transform: translateY(1px); }
+dialog button#dlgOk,
+dialog button#outOk,
+dialog button#moveOk{
+  background: #0ea5e9; border-color: #0284c7; color: #fff;
+}
+dialog button#dlgCancel,
+dialog button#outCancel,
+dialog button#moveCancel{ background: #fff; }
+dialog button#dlgBtnSearch{ background: #e2e8f0; border-color: #cbd5e1; }
+
+dialog .muted{ color: #64748b; font-size: 12px; }
+
+/* ---------- Utilities ---------- */
+.muted{ color: #64748b; }
+.r{ text-align: right; }
+
+
+/* Target highlight when picking move destination */
+.cell.target{
+  outline: 2px solid #16a34a;
+  outline-offset: -2px;
+}

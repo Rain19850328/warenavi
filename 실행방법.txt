@@ -1,0 +1,5 @@
+cd "D:\02. program\warehouse_service"
+py -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+cd "C:\caddy"
+.\caddy.exe run --config "C:\caddy\Caddyfile" --watch

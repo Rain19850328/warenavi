@@ -1,0 +1,15 @@
+:80 {
+    encode gzip zstd
+
+    root * "D:\02. program\warehouse_service"
+    handle /web/* {
+        try_files {path} /web/index.html
+        file_server
+    }
+
+    @root path /
+    redir @root /web/ permanent
+
+    @api path /api*
+    reverse_proxy @api http://127.0.0.1:8000
+}

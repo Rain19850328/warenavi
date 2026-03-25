@@ -1,0 +1,18 @@
+sellingonwarehouse.store {
+    encode gzip zstd
+
+    # 정적 파일: /web/*  (새 경로 반영)
+    root * "D:\02. program\warehouse_service"
+    handle /web/* {
+        try_files {path} /web/index.html
+        file_server
+    }
+
+    # 루트로 오면 /web/로 리다이렉트(선택)
+    @root path /
+    redir @root /web/ permanent
+
+    # API → FastAPI 프록시
+    @api path /api*
+    reverse_proxy @api http://127.0.0.1:8000
+}

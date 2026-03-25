@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>창고 현황판 · Classic Light</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./style.css">
+  <meta name="theme-color" content="#ffffff">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title">창고 현황판</div>
+      <label>행:
+        <select id="rowSelect"></select>
+      </label>
+      <input id="search" type="text" placeholder="SKU/품명/바코드 검색…" />
+      <button id="btnSearch">검색</button>
+      <button class="tool" id="fEmpty" title="빈칸만 보기(토글)">빈칸만</button>
+      <button class="tool" id="fLow"   title="저적재만 보기(토글)">저적재만</button>
+      <button class="tool" id="fMixed" title="혼재칸만 보기(토글)">혼재칸</button>
+      <button id="btnReload">⟳ 새로고침</button>
+    </div>
+
+    <div class="main stack">
+      <div id="rack"></div>
+
+      <div class="panel detail">
+        <h3 id="selTitle" class="panel-title">선택된 위치: -</h3>
+        <div id="selStats" class="muted">적재율: - · 용량: - · 사용: - · 남은공간: -</div>
+        <div class="progress" aria-label="적재율">
+          <div id="barFill" class="fill" style="width:0%"></div>
+        </div>
+        <table class="table" id="tblItems">
+          <thead><tr><th>SKU</th><th>상품명</th><th>수량</th><th>부피(m³)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="row-actions" style="margin-top:8px;">
+          <button id="btnInbound" disabled>입고</button>
+        </div>
+        <h4 style="margin:14px 0 6px;">최근 이력</h4>
+        <div class="logWrap">
+          <table id="tblLog">
+            <thead><tr><th>시간</th><th>유형</th><th>SKU</th><th>수량</th><th>From→To</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    });
+  }
+  </script>
+  <script src="./app.js"></script>
+</body>
+</html>
