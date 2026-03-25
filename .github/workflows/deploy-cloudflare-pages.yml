@@ -1,0 +1,43 @@
+name: Deploy Frontend to Cloudflare Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: cloudflare-pages-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CF_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve Cloudflare Pages project name
+        id: project
+        shell: bash
+        run: |
+          if [ -n "$CF_PAGES_PROJECT" ]; then
+            echo "name=$CF_PAGES_PROJECT" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${GITHUB_REPOSITORY#*/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy web/ to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            pages deploy web
+            --project-name=${{ steps.project.outputs.name }}
+            --branch=${{ github.ref_name }}
