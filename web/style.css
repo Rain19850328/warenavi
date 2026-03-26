@@ -430,7 +430,7 @@ dialog button#movePick{
 #tblResults td{ padding: 6px 10px; border-bottom: 1px solid #e2e8f0; }
 #tblResults tbody tr:hover{ background: #f8fafc; }
 
-#tblMovements{ width: 100%; border-collapse: collapse; font-size: 13px; }
+#tblMovements{ width: 100%; border-collapse: collapse; font-size: 11px; }
 #tblMovements thead th{
   position: sticky; top: 0; z-index: 1;
   text-align: left;
@@ -440,9 +440,10 @@ dialog button#movePick{
   padding: 6px 10px;
 }
 #tblMovements td{
-  padding: 6px 10px;
+  padding: 5px 8px;
   border-bottom: 1px solid #e2e8f0;
   vertical-align: top;
+  white-space: nowrap;
 }
 #tblMovements tbody tr:hover{ background: #f8fafc; }
 
