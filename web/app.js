@@ -927,6 +927,16 @@ function showDetail(ci) {
   loadMovements().catch(err => console.warn('rack movement load failed', err));
 }
 
+function resetDetailPanel() {
+  CURRENT_CELL = null;
+  CURRENT_ITEM_SKU = null;
+  document.querySelector('#selTitle').textContent = '선택된 위치: -';
+  document.querySelector('#selStats').textContent = '적재율: - · 용량: - · 사용: - · 남은공간: -';
+  document.querySelector('#barFill').style.width = '0%';
+  const tb = document.querySelector('#tblItems tbody');
+  if (tb) tb.innerHTML = '';
+}
+
 /* ---------- inbound / outbound / move ---------- */
 async function openInbound() {
   if (!CURRENT_CELL) { alert('먼저 랙의 셀을 클릭해 선택하세요.'); return; }
@@ -1385,7 +1395,15 @@ async function init() {
   rs.value = CONFIG.rows[0];
   rs.addEventListener('change', async ()=>{ await loadCells(); clearResults(); });
 
-  document.querySelector('#btnReload').addEventListener('click', async ()=>{ await loadCells(); });
+  document.querySelector('#btnReload').addEventListener('click', async ()=>{
+    const searchInput = document.querySelector('#search');
+    if (searchInput) searchInput.value = '';
+    hideSuggest();
+    clearResults();
+    resetDetailPanel();
+    await loadCells();
+    await loadMovements();
+  });
   async function handleSearch(){
     renderRack();
     const q = (document.querySelector('#search')?.value || '').trim();
