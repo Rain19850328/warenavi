@@ -1,0 +1,17 @@
+/*
+  Cache-Control: no-store
+
+/index.html
+  Cache-Control: no-store
+
+/config.js
+  Cache-Control: no-store
+
+/auth.js
+  Cache-Control: no-store
+
+/app.js
+  Cache-Control: no-store
+
+/sw.js
+  Cache-Control: no-store
