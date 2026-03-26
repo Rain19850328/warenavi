@@ -1,5 +1,5 @@
 // PWA service worker — anti-stale (v2025090925)
-const CACHE_NAME = 'pwa-cache-v2025090925';
+const CACHE_NAME = 'pwa-cache-v2026032601';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
@@ -33,7 +33,7 @@ self.addEventListener('fetch', (e) => {
     })());
     return;
   }
-  const isCore = /\/(index\.html|app\.js|style\.css)$/.test(url.pathname);
+  const isCore = /\/(index\.html|app\.js|auth\.js|style\.css|config\.js)$/.test(url.pathname);
   if (isCore) {
     e.respondWith((async () => {
       try { return await fetch(e.request, { cache:'no-store' }); }

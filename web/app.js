@@ -10,6 +10,7 @@ let CELLS = [];
 let CURRENT_ROW = null;
 let CURRENT_CELL = null;
 let CURRENT_ITEM_SKU = null;
+let MOVEMENTS = [];
 
 /* ---------- dialog helpers ---------- */
 let __dlgOverlay = null;
@@ -594,6 +595,7 @@ function ensureLocationDialog(){
       // 저장 (00 포함 일반코드 모두 동일 엔드포인트)
       try{
         await postJSON(`${API_BASE}/set_location`, { item_code: sel.code, location: locNew });
+        await loadMovements();
         alert('로케이션 코드 변경 완료');
 
         // 화면 반영
@@ -636,16 +638,32 @@ async function openLocationDialog(){
 async function getJSON(url) {
   const u = new URL(url, location.origin);
   u.searchParams.set('_', Date.now());
-  const r = await fetch(u.toString(), { cache:'no-store' });
+  const r = await fetch(u.toString(), {
+    cache:'no-store',
+    headers: await getRequestHeaders(),
+  });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
 async function postJSON(url, body) {
-  const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body), cache:'no-store' });
+  const r = await fetch(url, {
+    method:'POST',
+    headers: await getRequestHeaders({'Content-Type':'application/json'}),
+    body: JSON.stringify(body),
+    cache:'no-store',
+  });
   let data = {};
   try { data = await r.json(); } catch (_) {}
   if (!r.ok) throw new Error(data.detail || r.statusText || '요청 실패');
   return data;
+}
+
+async function getRequestHeaders(extra = {}) {
+  const headers = { ...extra };
+  if (window.WarehouseAuth && typeof window.WarehouseAuth.getApiHeaders === 'function') {
+    Object.assign(headers, await window.WarehouseAuth.getApiHeaders());
+  }
+  return headers;
 }
 
 /* ---------- utils ---------- */
@@ -955,6 +973,7 @@ async function openInbound() {
     const qty = Math.max(1, parseInt(qtyEl.value||'1',10));
     try {
       await postJSON(`${API_BASE}/inbound`, { rack_code: CURRENT_CELL.code, item_code: code, qty });
+      await loadMovements();
       await loadCells();
       const found = CELLS.find(c=>c.code===CURRENT_CELL.code);
       if (found) showDetail(found);
@@ -1010,6 +1029,7 @@ async function openOutbound(){
     const qty = Math.max(1, Math.min(item.qty, parseInt((qtyEl?.value)||'1',10)));
     try{
       await postJSON(`${API_BASE}/outbound`, { rack_code: CURRENT_CELL.code, item_code: item.sku, qty });
+      await loadMovements();
       await loadCells();
       const found = CELLS.find(c=>c.code===CURRENT_CELL.code);
       if(found) showDetail(found);
@@ -1108,6 +1128,7 @@ async function openMove(preserve=false){
     if(qty > MOVE.maxQty) qty = MOVE.maxQty;
     try{
       await postJSON(`${API_BASE}/move`, { from_rack: MOVE.sourceCode, to_rack: MOVE.targetCode, item_code: MOVE.sku, qty });
+      await loadMovements();
       await loadCells();
       const found = CELLS.find(c=>c.code===MOVE.sourceCode);
       if(found) showDetail(found);
@@ -1173,6 +1194,77 @@ async function renderSearchResults(query){
     });
     tb.append(tr);
   }
+}
+
+function formatMovementType(type){
+  switch (type) {
+    case 'inbound': return '입고';
+    case 'outbound': return '출고';
+    case 'move': return '이동';
+    case 'set_location': return '위치변경';
+    default: return type || '-';
+  }
+}
+
+function formatMovementTarget(item){
+  if (!item) return '-';
+  if (item.movement_type === 'move') {
+    return `${item.from_rack || '-'} -> ${item.to_rack || '-'}`;
+  }
+  if (item.movement_type === 'set_location') {
+    return item.note || item.payload?.location || '-';
+  }
+  return item.rack_code || item.payload?.rack_code || '-';
+}
+
+function formatMovementDate(value){
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+}
+
+function renderMovements(){
+  const section = document.querySelector('#movementLog');
+  const tbody = document.querySelector('#tblMovements tbody');
+  if (!section || !tbody) return;
+
+  tbody.innerHTML = '';
+  if (!MOVEMENTS.length) {
+    section.hidden = true;
+    return;
+  }
+
+  section.hidden = false;
+
+  for (const item of MOVEMENTS) {
+    const userLabel = item.actor_name || item.actor_email || '-';
+    const nameLabel = item.item_name ? `${item.item_code} / ${item.item_name}` : (item.item_code || '-');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${formatMovementDate(item.created_at)}</td>
+      <td><div>${userLabel}</div><div class="muted">${item.actor_email || ''}</div></td>
+      <td>${formatMovementType(item.movement_type)}</td>
+      <td>${nameLabel}</td>
+      <td class="r">${Number(item.quantity || 0).toLocaleString('ko-KR')}</td>
+      <td>${formatMovementTarget(item)}</td>
+    `;
+    tbody.append(tr);
+  }
+}
+
+async function loadMovements(){
+  const data = await getJSON(`${API_BASE}/movements?limit=30`);
+  MOVEMENTS = data.items || [];
+  renderMovements();
 }
 
 /* ---------- data ---------- */
@@ -1261,6 +1353,11 @@ function ensureFooterActions(){
 
 /* ---------- init ---------- */
 async function init() {
+  if (window.WarehouseAuth && typeof window.WarehouseAuth.requireSession === 'function') {
+    await window.WarehouseAuth.requireSession();
+    window.WarehouseAuth.render?.();
+  }
+
   try {
     CONFIG = await getJSON(`${API_BASE}/config`);
   } catch (err) {
@@ -1341,6 +1438,13 @@ async function init() {
   });
 
   await loadCells();
+  try {
+    await loadMovements();
+  } catch (err) {
+    console.warn('recent movements load failed', err);
+    MOVEMENTS = [];
+    renderMovements();
+  }
   clearResults();
 }
 

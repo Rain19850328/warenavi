@@ -5,6 +5,12 @@ const FUNCTION_PREFIXES = [
   "/warehouse-api",
 ];
 
+type AuthContext = {
+  userId: string;
+  email: string;
+  name: string;
+};
+
 function corsHeaders(req: Request) {
   const allowedOrigin = Deno.env.get("ALLOWED_ORIGIN") || "*";
   const requestOrigin = req.headers.get("origin");
@@ -47,6 +53,52 @@ function getPositiveInt(value: string | null, fallback: number) {
   return parsed;
 }
 
+function decodeBase64Url(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+  return atob(`${normalized}${padding}`);
+}
+
+function getJwtPayload(token: string) {
+  const parts = token.split(".");
+  if (parts.length < 2) {
+    throw new Error("Invalid authorization token");
+  }
+
+  const raw = decodeBase64Url(parts[1]);
+  const payload = JSON.parse(raw);
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Invalid authorization payload");
+  }
+  return payload as Record<string, unknown>;
+}
+
+function getAuthContext(req: Request): AuthContext {
+  const header = req.headers.get("authorization") || "";
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    throw new Error("Authentication is required");
+  }
+
+  const payload = getJwtPayload(match[1]);
+  const userId = typeof payload.sub === "string" ? payload.sub : "";
+  const email = typeof payload.email === "string" ? payload.email : "";
+  const metadata = payload.user_metadata && typeof payload.user_metadata === "object"
+    ? payload.user_metadata as Record<string, unknown>
+    : {};
+  const name = typeof metadata.display_name === "string" && metadata.display_name.trim()
+    ? metadata.display_name.trim()
+    : typeof metadata.name === "string" && metadata.name.trim()
+    ? metadata.name.trim()
+    : email;
+
+  if (!userId) {
+    throw new Error("Invalid authenticated user");
+  }
+
+  return { userId, email, name };
+}
+
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") || "",
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
@@ -63,9 +115,10 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const path = getPath(url);
+    const auth = getAuthContext(req);
 
     if (req.method === "GET" && path === "/") {
-      return json(req, { ok: true, service: "warehouse-api" });
+      return json(req, { ok: true, service: "warehouse-api", user: auth });
     }
 
     if (req.method === "GET" && path === "/config") {
@@ -108,12 +161,25 @@ Deno.serve(async (req) => {
       return json(req, data);
     }
 
+    if (req.method === "GET" && path === "/movements") {
+      const mineOnly = url.searchParams.get("mine") === "1";
+      const { data, error } = await supabase.rpc("warehouse_get_movements", {
+        p_limit: getPositiveInt(url.searchParams.get("limit"), 30),
+        p_actor_user_id: mineOnly ? auth.userId : null,
+      });
+      if (error) throw error;
+      return json(req, data);
+    }
+
     if (req.method === "POST" && path === "/inbound") {
       const payload = await req.json();
       const { data, error } = await supabase.rpc("warehouse_post_inbound", {
         p_rack_code: payload.rack_code,
         p_item_code: payload.item_code,
         p_qty: payload.qty,
+        p_actor_user_id: auth.userId,
+        p_actor_email: auth.email,
+        p_actor_name: auth.name,
       });
       if (error) throw error;
       return json(req, data);
@@ -125,6 +191,9 @@ Deno.serve(async (req) => {
         p_rack_code: payload.rack_code,
         p_item_code: payload.item_code,
         p_qty: payload.qty,
+        p_actor_user_id: auth.userId,
+        p_actor_email: auth.email,
+        p_actor_name: auth.name,
       });
       if (error) throw error;
       return json(req, data);
@@ -137,6 +206,9 @@ Deno.serve(async (req) => {
         p_to_rack: payload.to_rack,
         p_item_code: payload.item_code,
         p_qty: payload.qty,
+        p_actor_user_id: auth.userId,
+        p_actor_email: auth.email,
+        p_actor_name: auth.name,
       });
       if (error) throw error;
       return json(req, data);
@@ -147,6 +219,9 @@ Deno.serve(async (req) => {
       const { data, error } = await supabase.rpc("warehouse_post_set_location", {
         p_item_code: payload.item_code,
         p_location: payload.location,
+        p_actor_user_id: auth.userId,
+        p_actor_email: auth.email,
+        p_actor_name: auth.name,
       });
       if (error) throw error;
       return json(req, data);

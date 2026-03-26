@@ -9,7 +9,7 @@
   <link rel="shortcut icon" href="icons/sellingon_icon.ico" type="image/x-icon">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <title>창고 현황판</title>
-  <link rel="stylesheet" href="style.css?v=20250825-05">
+  <link rel="stylesheet" href="style.css?v=20260326-01">
 </head>
 <body>
   <div class="container">
@@ -63,9 +63,32 @@
         <button id="btnMove" class="primary">이동</button>
       </div>
     </section>
+
+    <section id="movementLog" class="detail" hidden>
+      <div class="detail-header">
+        <h3>Recent Activity</h3>
+        <div class="muted">Latest warehouse actions by logged-in users</div>
+      </div>
+      <div class="detail-body">
+        <table id="tblMovements">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Item</th>
+              <th class="r">Qty</th>
+              <th>Rack / Location</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
   </div>
 
   <script src="config.js"></script>
-  <script src="app.js?v=20250825-05" defer></script>
+  <script src="auth.js?v=20260326-01" defer></script>
+  <script src="app.js?v=20260326-01" defer></script>
 </body>
 </html>

@@ -21,6 +21,8 @@ Repository variables:
 - `SUPABASE_PROJECT_ID`
 - `PUBLIC_SITE_ORIGIN`
 - `PUBLIC_API_BASE` (optional override)
+- `PUBLIC_SUPABASE_URL` (optional override)
+- `PUBLIC_SUPABASE_ANON_KEY` or `SUPABASE_ANON_KEY`
 
 권장 값:
 - `SUPABASE_PROJECT_ID`: Supabase 대시보드 URL의 프로젝트 ref
@@ -30,6 +32,9 @@ Repository variables:
   예: `https://warenavi.pages.dev`
 - `PUBLIC_API_BASE`: Supabase Edge Function 기본 주소. 비워 두면 `SUPABASE_PROJECT_ID`로 자동 생성
   예: `https://<project-ref>.supabase.co/functions/v1/warehouse-api`
+- `PUBLIC_SUPABASE_URL`: Frontend login flow용 Supabase base URL. 비워 두면 `SUPABASE_PROJECT_ID`로 자동 생성
+  예: `https://<project-ref>.supabase.co`
+- `PUBLIC_SUPABASE_ANON_KEY`: Frontend login flow에서 사용하는 anon key
 - `SUPABASE_DB_URL`: Supabase의 Session Pooler 연결 문자열
   예: `postgresql://postgres.<project-ref>:[PASSWORD]@aws-0-<region>.pooler.supabase.com:5432/postgres`
 

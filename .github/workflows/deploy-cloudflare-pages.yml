@@ -19,6 +19,8 @@ jobs:
     env:
       CF_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
       PUBLIC_API_BASE: ${{ vars.PUBLIC_API_BASE }}
+      PUBLIC_SUPABASE_URL: ${{ vars.PUBLIC_SUPABASE_URL }}
+      PUBLIC_SUPABASE_ANON_KEY: ${{ vars.PUBLIC_SUPABASE_ANON_KEY || vars.SUPABASE_ANON_KEY || secrets.SUPABASE_ANON_KEY }}
       SUPABASE_PROJECT_ID: ${{ vars.SUPABASE_PROJECT_ID || secrets.SUPABASE_PROJECT_ID || vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}
     steps:
       - name: Checkout
@@ -38,13 +40,20 @@ jobs:
         shell: bash
         run: |
           API_BASE_VALUE="$PUBLIC_API_BASE"
+          SUPABASE_URL_VALUE="$PUBLIC_SUPABASE_URL"
+          SUPABASE_ANON_KEY_VALUE="$PUBLIC_SUPABASE_ANON_KEY"
           if [ -z "$API_BASE_VALUE" ] && [ -n "$SUPABASE_PROJECT_ID" ]; then
             API_BASE_VALUE="https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/warehouse-api"
+          fi
+          if [ -z "$SUPABASE_URL_VALUE" ] && [ -n "$SUPABASE_PROJECT_ID" ]; then
+            SUPABASE_URL_VALUE="https://${SUPABASE_PROJECT_ID}.supabase.co"
           fi
           API_BASE_VALUE="${API_BASE_VALUE:-/api}"
           cat > web/config.js <<EOF
           window.APP_CONFIG = window.APP_CONFIG || {
             API_BASE: "${API_BASE_VALUE}",
+            SUPABASE_URL: "${SUPABASE_URL_VALUE}",
+            SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY_VALUE}",
           };
           EOF
 
