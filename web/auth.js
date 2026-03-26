@@ -413,6 +413,18 @@
   async function requireSession() {
     ensureUi();
 
+    if (session?.access_token) {
+      closeAuthScreen();
+      if (!session.user) {
+        hydrateUser()
+          .then(() => renderAuthShell())
+          .catch((error) => console.warn("hydrateUser skipped during boot", error));
+      } else {
+        renderAuthShell();
+      }
+      return session;
+    }
+
     try {
       const current = await ensureSession();
       closeAuthScreen();
@@ -436,9 +448,15 @@
   }
 
   async function getApiHeaders() {
-    const current = await ensureSession();
+    getConfig();
+    if (!session?.access_token) {
+      throw new Error("로그인이 필요합니다.");
+    }
+    if (!session.expires_at || (session.expires_at - REFRESH_MARGIN_MS) <= Date.now()) {
+      refreshSession().catch((error) => console.warn("refreshSession skipped in headers", error));
+    }
     const headers = {
-      Authorization: `Bearer ${current.access_token}`,
+      Authorization: `Bearer ${session.access_token}`,
     };
     const { SUPABASE_ANON_KEY } = getConfig();
     if (SUPABASE_ANON_KEY) {
