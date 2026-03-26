@@ -148,8 +148,9 @@ Deno.serve(async (req) => {
     if (req.method === "GET" && path === "/movements") {
       const mineOnly = url.searchParams.get("mine") === "1";
       const { data, error } = await supabase.rpc("warehouse_get_movements", {
-        p_limit: getPositiveInt(url.searchParams.get("limit"), 30),
+        p_limit: getPositiveInt(url.searchParams.get("limit"), 200),
         p_actor_user_id: mineOnly ? auth.userId : null,
+        p_rack_code: url.searchParams.get("rack_code"),
       });
       if (error) throw error;
       return json(req, data);

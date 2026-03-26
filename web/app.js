@@ -924,6 +924,7 @@ function showDetail(ci) {
     });
     tb.append(tr);
   }
+  loadMovements().catch(err => console.warn('rack movement load failed', err));
 }
 
 /* ---------- inbound / outbound / move ---------- */
@@ -1227,7 +1228,6 @@ function formatMovementDate(value){
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
-    second: '2-digit',
     hour12: false,
   });
 }
@@ -1246,12 +1246,12 @@ function renderMovements(){
   section.hidden = false;
 
   for (const item of MOVEMENTS) {
-    const userLabel = item.actor_name || item.actor_email || '-';
+    const userLabel = item.actor_name || '-';
     const nameLabel = item.item_name ? `${item.item_code} / ${item.item_name}` : (item.item_code || '-');
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${formatMovementDate(item.created_at)}</td>
-      <td><div>${userLabel}</div><div class="muted">${item.actor_email || ''}</div></td>
+      <td>${userLabel}</td>
       <td>${formatMovementType(item.movement_type)}</td>
       <td>${nameLabel}</td>
       <td class="r">${Number(item.quantity || 0).toLocaleString('ko-KR')}</td>
@@ -1262,7 +1262,12 @@ function renderMovements(){
 }
 
 async function loadMovements(){
-  const data = await getJSON(`${API_BASE}/movements?limit=30`);
+  const params = new URLSearchParams();
+  params.set('limit', CURRENT_CELL?.code ? '200' : '200');
+  if (CURRENT_CELL?.code) {
+    params.set('rack_code', CURRENT_CELL.code);
+  }
+  const data = await getJSON(`${API_BASE}/movements?${params.toString()}`);
   MOVEMENTS = data.items || [];
   renderMovements();
 }
