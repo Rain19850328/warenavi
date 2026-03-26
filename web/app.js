@@ -1080,14 +1080,20 @@ async function openOutbound(){
   dlg.querySelector('#outCancel').onclick = (e)=>{ e.preventDefault(); closeDialog(dlg); };
   dlg.querySelector('#outOk').onclick = async (e)=>{
     e.preventDefault();
+    if (isDialogPending(dlg)) return;
     const qty = Math.max(1, Math.min(item.qty, parseInt((qtyEl?.value)||'1',10)));
     try{
-      await postJSON(`${API_BASE}/outbound`, { rack_code: CURRENT_CELL.code, item_code: item.sku, qty });
-      await loadMovements();
-      await loadCells();
-      const found = CELLS.find(c=>c.code===CURRENT_CELL.code);
-      if(found) showDetail(found);
-      closeDialog(dlg);
+      setDialogPending(dlg, true, '#outOk');
+      try {
+        await postJSON(`${API_BASE}/outbound`, { rack_code: CURRENT_CELL.code, item_code: item.sku, qty });
+        await loadMovements();
+        await loadCells();
+        const found = CELLS.find(c=>c.code===CURRENT_CELL.code);
+        if(found) showDetail(found);
+        closeDialog(dlg);
+      } finally {
+        setDialogPending(dlg, false, '#outOk');
+      }
     }catch(err){ alert('출고 실패: ' + (err.message||err)); }
   };
 
@@ -1175,19 +1181,25 @@ async function openMove(preserve=false){
   dlg.querySelector('#moveCancel').onclick = (e)=>{ e.preventDefault(); resetMoveState(); closeDialog(dlg); };
   dlg.querySelector('#moveOk').onclick = async (e)=>{
     e.preventDefault();
+    if (isDialogPending(dlg)) return;
     if(!MOVE.targetCode) return alert('대상 위치를 선택하세요.');
     if(MOVE.targetCode === MOVE.sourceCode) return alert('같은 위치로는 이동할 수 없습니다.');
     let qty = parseInt((qtyEl?.value)||'1',10);
     if(!Number.isFinite(qty) || qty <= 0) qty = 1;
     if(qty > MOVE.maxQty) qty = MOVE.maxQty;
     try{
-      await postJSON(`${API_BASE}/move`, { from_rack: MOVE.sourceCode, to_rack: MOVE.targetCode, item_code: MOVE.sku, qty });
-      await loadMovements();
-      await loadCells();
-      const found = CELLS.find(c=>c.code===MOVE.sourceCode);
-      if(found) showDetail(found);
-      resetMoveState();
-      closeDialog(dlg);
+      setDialogPending(dlg, true, '#moveOk');
+      try {
+        await postJSON(`${API_BASE}/move`, { from_rack: MOVE.sourceCode, to_rack: MOVE.targetCode, item_code: MOVE.sku, qty });
+        await loadMovements();
+        await loadCells();
+        const found = CELLS.find(c=>c.code===MOVE.sourceCode);
+        if(found) showDetail(found);
+        resetMoveState();
+        closeDialog(dlg);
+      } finally {
+        setDialogPending(dlg, false, '#moveOk');
+      }
     }catch(err){ alert('이동 실패: ' + (err.message||err)); }
   };
   if (pickBtn){
