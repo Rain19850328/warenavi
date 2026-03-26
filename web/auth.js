@@ -67,6 +67,7 @@
     session = next;
     persistSession();
     renderAuthShell();
+    closeAuthScreen();
     return session;
   }
 
@@ -496,4 +497,8 @@
   };
 
   ensureUi();
+  if (session?.access_token) {
+    closeAuthScreen();
+    renderAuthShell();
+  }
 })();
