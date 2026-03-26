@@ -17,6 +17,31 @@ let __dlgOverlay = null;
 function openDialog(el) { if (el && typeof el.showModal === 'function') { el.showModal(); return; } if (!el) return; __dlgOverlay = document.createElement('div'); __dlgOverlay.className = 'backdrop'; document.body.append(__dlgOverlay); el.setAttribute('open',''); }
 function closeDialog(el) { if (el && typeof el.close === 'function') { el.close(); return; } if (!el) return; el.removeAttribute('open'); if (__dlgOverlay) { __dlgOverlay.remove(); __dlgOverlay = null; } }
 
+function setDialogPending(dlg, pending, submitSelector, pendingLabel = '처리중...') {
+  if (!dlg) return;
+  dlg.dataset.pending = pending ? '1' : '0';
+  dlg.querySelectorAll('button, input, select, textarea').forEach(el => {
+    if (pending) {
+      el.dataset.wasDisabled = el.disabled ? '1' : '0';
+      el.disabled = true;
+    } else if (el.dataset.wasDisabled !== '1') {
+      el.disabled = false;
+    }
+  });
+  const submitBtn = submitSelector ? dlg.querySelector(submitSelector) : null;
+  if (submitBtn) {
+    if (!submitBtn.dataset.defaultLabel) {
+      submitBtn.dataset.defaultLabel = submitBtn.textContent || '';
+    }
+    submitBtn.textContent = pending ? pendingLabel : submitBtn.dataset.defaultLabel;
+    submitBtn.disabled = pending;
+  }
+}
+
+function isDialogPending(dlg) {
+  return dlg?.dataset?.pending === '1';
+}
+
 /* ---------- inbound dialog ---------- */
 function ensureInboundDialog() {
   let dlg = document.getElementById('dlgInbound');
@@ -573,6 +598,7 @@ function ensureLocationDialog(){
     btnOk.__bound = true;
     btnOk.addEventListener('click', async e=>{
       e.preventDefault();
+      if (isDialogPending(dlg)) return;
       const sel = JSON.parse(dlg.dataset.selected || '{}');
       const locNew = (newCodeEl?.value || '').trim();
       if (!sel.code) return alert('표에서 항목을 선택하세요.');
@@ -594,6 +620,7 @@ function ensureLocationDialog(){
 
       // 저장 (00 포함 일반코드 모두 동일 엔드포인트)
       try{
+        setDialogPending(dlg, true, '#locDlgConfirm');
         await postJSON(`${API_BASE}/set_location`, { item_code: sel.code, location: locNew });
         await loadMovements();
         alert('로케이션 코드 변경 완료');
@@ -645,17 +672,29 @@ async function getJSON(url) {
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
+const PENDING_POSTS = new Map();
 async function postJSON(url, body) {
+  const payload = JSON.stringify(body);
+  const key = `${url}::${payload}`;
+  if (PENDING_POSTS.has(key)) return PENDING_POSTS.get(key);
+  const request = (async () => {
   const r = await fetch(url, {
     method:'POST',
     headers: await getRequestHeaders({'Content-Type':'application/json'}),
-    body: JSON.stringify(body),
+    body: payload,
     cache:'no-store',
   });
   let data = {};
   try { data = await r.json(); } catch (_) {}
   if (!r.ok) throw new Error(data.detail || r.statusText || '요청 실패');
   return data;
+  })();
+  PENDING_POSTS.set(key, request);
+  try {
+    return await request;
+  } finally {
+    PENDING_POSTS.delete(key);
+  }
 }
 
 async function getRequestHeaders(extra = {}) {
@@ -978,11 +1017,13 @@ async function openInbound() {
   dlg.querySelector('#dlgCancel').onclick = (e)=>{ e.preventDefault(); closeDialog(dlg); };
   dlg.querySelector('#dlgOk').onclick = async (e)=>{
     e.preventDefault();
+    if (isDialogPending(dlg)) return;
     const selRow = list.querySelector('.item.sel');
     if (!selRow) { alert('아이템을 선택하세요.'); return; }
     const code = selRow.querySelector('strong').textContent.trim();
     const qty = Math.max(1, parseInt(qtyEl.value||'1',10));
     try {
+      setDialogPending(dlg, true, '#dlgOk');
       await postJSON(`${API_BASE}/inbound`, { rack_code: CURRENT_CELL.code, item_code: code, qty });
       await loadMovements();
       await loadCells();
@@ -990,7 +1031,9 @@ async function openInbound() {
       if (found) showDetail(found);
       alert(`[${CURRENT_CELL.code}] 위치로 ${code} ${qty}개 입고 완료`);
       closeDialog(dlg);
+      setDialogPending(dlg, false, '#dlgOk');
     } catch (err) {
+      setDialogPending(dlg, false, '#dlgOk');
       alert('입고 실패: ' + (err.message || err));
     }
   };
