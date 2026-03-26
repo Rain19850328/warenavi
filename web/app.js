@@ -1227,7 +1227,7 @@ function formatMovementDate(value){
   const dd = String(date.getDate()).padStart(2, '0');
   const hh = String(date.getHours()).padStart(2, '0');
   const mi = String(date.getMinutes()).padStart(2, '0');
-  return `${yy}.${mm}.${dd} / ${hh}:${mi}`;
+  return `${yy}.${mm}.${dd}(${hh}:${mi})`;
 }
 
 function renderMovements(){
