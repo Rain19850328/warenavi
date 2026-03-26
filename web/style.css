@@ -61,6 +61,9 @@ body.auth-open { overflow: hidden; }
   background: rgba(15, 23, 42, .55);
   backdrop-filter: blur(10px);
 }
+.auth-screen[hidden]{
+  display: none !important;
+}
 .auth-card{
   width: min(420px, 100%);
   padding: 24px;

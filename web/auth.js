@@ -298,6 +298,7 @@
     const screen = document.getElementById("authScreen");
     if (!screen) return;
     screen.hidden = false;
+    screen.style.display = "flex";
     document.body.classList.add("auth-open");
     switchMode(mode);
     setStatus(message, false);
@@ -307,6 +308,7 @@
     const screen = document.getElementById("authScreen");
     if (!screen) return;
     screen.hidden = true;
+    screen.style.display = "none";
     document.body.classList.remove("auth-open");
     setStatus("");
   }
