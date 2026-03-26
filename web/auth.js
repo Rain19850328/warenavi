@@ -359,6 +359,8 @@
       await hydrateUser();
       closeAuthScreen();
       resolveAuthGate();
+      window.location.reload();
+      return;
     } catch (error) {
       setStatus(error.message || String(error), true);
     } finally {
@@ -390,6 +392,7 @@
         await hydrateUser();
         closeAuthScreen();
         resolveAuthGate();
+        window.location.reload();
         return;
       }
 
