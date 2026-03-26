@@ -13,17 +13,17 @@ Repository secrets:
 - `SUPABASE_ACCESS_TOKEN`
 - `SUPABASE_DB_PASSWORD`
 - `SUPABASE_DB_URL`
-- `SUPABASE_PROJECT_REF` (optional fallback if not stored as variable)
+- `SUPABASE_PROJECT_ID`
 - `SUPABASE_PROJECT_URL` (optional fallback if not storing project ref directly)
 - `PUBLIC_SITE_ORIGIN` (optional fallback if not stored as variable)
 
 Repository variables:
-- `SUPABASE_PROJECT_REF`
+- `SUPABASE_PROJECT_ID`
 - `PUBLIC_SITE_ORIGIN`
 - `PUBLIC_API_BASE`
 
 권장 값:
-- `SUPABASE_PROJECT_REF`: Supabase 대시보드 URL의 프로젝트 ref
+- `SUPABASE_PROJECT_ID`: Supabase 대시보드 URL의 프로젝트 ref
 - `SUPABASE_PROJECT_URL`: 전체 프로젝트 대시보드 주소도 허용
   예: `https://supabase.com/dashboard/project/<project-ref>`
 - `PUBLIC_SITE_ORIGIN`: Cloudflare Pages 프론트 주소
