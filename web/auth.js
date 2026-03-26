@@ -165,15 +165,6 @@
       await refreshSession();
     }
 
-    if (!session.user) {
-      try {
-        await hydrateUser();
-      } catch (_) {
-        clearSession();
-        throw new Error("세션이 만료되었습니다. 다시 로그인해 주세요.");
-      }
-    }
-
     return session;
   }
 
@@ -356,7 +347,11 @@
         body: { email, password },
       });
       saveSession(data);
-      await hydrateUser();
+      try {
+        await hydrateUser();
+      } catch (error) {
+        console.warn("hydrateUser failed after signin", error);
+      }
       closeAuthScreen();
       resolveAuthGate();
       window.location.reload();
@@ -389,7 +384,11 @@
 
       if (data.access_token) {
         saveSession(data);
-        await hydrateUser();
+        try {
+          await hydrateUser();
+        } catch (error) {
+          console.warn("hydrateUser failed after signup", error);
+        }
         closeAuthScreen();
         resolveAuthGate();
         window.location.reload();
@@ -411,7 +410,16 @@
     ensureUi();
 
     try {
-      return await ensureSession();
+      const current = await ensureSession();
+      closeAuthScreen();
+      if (!current.user) {
+        hydrateUser()
+          .then(() => renderAuthShell())
+          .catch((error) => console.warn("hydrateUser skipped during boot", error));
+      } else {
+        renderAuthShell();
+      }
+      return current;
     } catch (error) {
       openAuthScreen("signin", error.message || "로그인이 필요합니다.");
       if (!authGatePromise) {
