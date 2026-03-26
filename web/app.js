@@ -1482,24 +1482,12 @@ function applyFooterSafePadding(){
   }
 }
 
-/* ---------- Service Worker: auto-update & auto-reload ---------- */
+/* ---------- Service Worker ---------- */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const reg = await navigator.serviceWorker.register('sw.js');
-      reg.addEventListener('updatefound', () => {
-        const nw = reg.installing;
-        if (!nw) return;
-        nw.addEventListener('statechange', () => {
-          if (nw.state === 'installed' && reg.waiting) {
-            reg.waiting.postMessage('SKIP_WAITING');
-          }
-        });
-      });
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!window.__reloadedBySW) { window.__reloadedBySW = true; location.reload(); }
-      });
-      setTimeout(() => reg.update().catch(()=>{}), 1000);
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(reg => reg.unregister()));
     } catch (e) {
       console.error('SW 등록 실패', e);
     }
