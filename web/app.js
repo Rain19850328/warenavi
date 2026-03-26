@@ -605,6 +605,8 @@ function ensureLocationDialog(){
       if (!locNew)  return alert('새 로케이션 코드를 입력하세요.');
 
       // ✅ 정확히 "00" 이면 중복검사 생략
+      setDialogPending(dlg, true, '#locDlgConfirm');
+      try {
       if (locNew !== '00') {
         try{
           const used = await isLocationInUse(locNew);
@@ -620,7 +622,6 @@ function ensureLocationDialog(){
 
       // 저장 (00 포함 일반코드 모두 동일 엔드포인트)
       try{
-        setDialogPending(dlg, true, '#locDlgConfirm');
         await postJSON(`${API_BASE}/set_location`, { item_code: sel.code, location: locNew });
         await loadMovements();
         alert('로케이션 코드 변경 완료');
@@ -638,6 +639,9 @@ function ensureLocationDialog(){
         })();
       }catch(err){
         alert(err?.message || String(err) || '요청 실패');
+      }
+      } finally {
+        setDialogPending(dlg, false, '#locDlgConfirm');
       }
     });
   }
