@@ -20,7 +20,7 @@ Repository secrets:
 Repository variables:
 - `SUPABASE_PROJECT_ID`
 - `PUBLIC_SITE_ORIGIN`
-- `PUBLIC_API_BASE`
+- `PUBLIC_API_BASE` (optional override)
 
 권장 값:
 - `SUPABASE_PROJECT_ID`: Supabase 대시보드 URL의 프로젝트 ref
@@ -28,7 +28,7 @@ Repository variables:
   예: `https://supabase.com/dashboard/project/<project-ref>`
 - `PUBLIC_SITE_ORIGIN`: Cloudflare Pages 프론트 주소
   예: `https://warenavi.pages.dev`
-- `PUBLIC_API_BASE`: Supabase Edge Function 기본 주소
+- `PUBLIC_API_BASE`: Supabase Edge Function 기본 주소. 비워 두면 `SUPABASE_PROJECT_ID`로 자동 생성
   예: `https://<project-ref>.supabase.co/functions/v1/warehouse-api`
 - `SUPABASE_DB_URL`: Supabase의 Session Pooler 연결 문자열
   예: `postgresql://postgres.<project-ref>:[PASSWORD]@aws-0-<region>.pooler.supabase.com:5432/postgres`
@@ -39,7 +39,7 @@ Repository variables:
 2. GitHub Actions가 Session Pooler DB URL로 원격 Postgres에 연결합니다.
 3. `supabase/migrations`의 SQL을 원격 Postgres에 적용합니다.
 4. `warehouse-api` Edge Function을 배포합니다.
-5. 프론트 Cloudflare Pages 워크플로는 `PUBLIC_API_BASE`를 읽어 `web/config.js`를 생성하고 배포합니다.
+5. 프론트 Cloudflare Pages 워크플로는 `PUBLIC_API_BASE` 또는 `SUPABASE_PROJECT_ID`를 사용해 `web/config.js`를 생성하고 배포합니다.
 
 ## 현재 구조에서 바뀌는 점
 
@@ -58,7 +58,7 @@ Repository variables:
 2. `daily_stock.date` 컬럼 이름이 현재 SQL에서는 `stock_date`로 바뀌었으므로 마이그레이션 시 매핑이 필요합니다.
 3. 현재 Edge Function은 `verify_jwt = false`로 되어 있습니다.
    운영에서는 로그인/권한 정책을 넣고 다시 잠그는 것이 맞습니다.
-4. Cloudflare Pages가 새 `PUBLIC_API_BASE` 값을 읽도록 다시 한 번 push 해야 합니다.
+4. Cloudflare Pages가 새 `PUBLIC_API_BASE` 또는 `SUPABASE_PROJECT_ID` 값을 읽도록 다시 한 번 push 해야 합니다.
 
 ## 데이터 이전 권장 순서
 
