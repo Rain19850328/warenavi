@@ -162,7 +162,11 @@
     }
 
     if (!session.expires_at || (session.expires_at - REFRESH_MARGIN_MS) <= Date.now()) {
-      await refreshSession();
+      try {
+        await refreshSession();
+      } catch (error) {
+        console.warn("refreshSession skipped", error);
+      }
     }
 
     return session;
