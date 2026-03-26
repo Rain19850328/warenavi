@@ -1,6 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const FUNCTION_PREFIX = "/functions/v1/warehouse-api";
+const FUNCTION_PREFIXES = [
+  "/functions/v1/warehouse-api",
+  "/warehouse-api",
+];
 
 function corsHeaders(req: Request) {
   const allowedOrigin = Deno.env.get("ALLOWED_ORIGIN") || "*";
@@ -33,9 +36,8 @@ function errorMessage(error: unknown) {
 }
 
 function getPath(url: URL) {
-  const raw = url.pathname.startsWith(FUNCTION_PREFIX)
-    ? url.pathname.slice(FUNCTION_PREFIX.length)
-    : url.pathname;
+  const prefix = FUNCTION_PREFIXES.find((value) => url.pathname.startsWith(value));
+  const raw = prefix ? url.pathname.slice(prefix.length) : url.pathname;
   return raw || "/";
 }
 
