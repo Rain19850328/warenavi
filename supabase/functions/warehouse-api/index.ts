@@ -53,50 +53,34 @@ function getPositiveInt(value: string | null, fallback: number) {
   return parsed;
 }
 
-function decodeBase64Url(value: string) {
-  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
-  return atob(`${normalized}${padding}`);
-}
-
-function getJwtPayload(token: string) {
-  const parts = token.split(".");
-  if (parts.length < 2) {
-    throw new Error("Invalid authorization token");
-  }
-
-  const raw = decodeBase64Url(parts[1]);
-  const payload = JSON.parse(raw);
-  if (!payload || typeof payload !== "object") {
-    throw new Error("Invalid authorization payload");
-  }
-  return payload as Record<string, unknown>;
-}
-
-function getAuthContext(req: Request): AuthContext {
+async function getAuthContext(req: Request): Promise<AuthContext> {
   const header = req.headers.get("authorization") || "";
   const match = header.match(/^Bearer\s+(.+)$/i);
   if (!match) {
     throw new Error("Authentication is required");
   }
 
-  const payload = getJwtPayload(match[1]);
-  const userId = typeof payload.sub === "string" ? payload.sub : "";
-  const email = typeof payload.email === "string" ? payload.email : "";
-  const metadata = payload.user_metadata && typeof payload.user_metadata === "object"
-    ? payload.user_metadata as Record<string, unknown>
+  const token = match[1];
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) {
+    throw new Error("Invalid or expired session");
+  }
+
+  const user = data.user;
+  const metadata = user.user_metadata && typeof user.user_metadata === "object"
+    ? user.user_metadata as Record<string, unknown>
     : {};
   const name = typeof metadata.display_name === "string" && metadata.display_name.trim()
     ? metadata.display_name.trim()
     : typeof metadata.name === "string" && metadata.name.trim()
     ? metadata.name.trim()
-    : email;
+    : user.email || "";
 
-  if (!userId) {
+  if (!user.id) {
     throw new Error("Invalid authenticated user");
   }
 
-  return { userId, email, name };
+  return { userId: user.id, email: user.email || "", name };
 }
 
 const supabase = createClient(
@@ -115,7 +99,7 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const path = getPath(url);
-    const auth = getAuthContext(req);
+    const auth = await getAuthContext(req);
 
     if (req.method === "GET" && path === "/") {
       return json(req, { ok: true, service: "warehouse-api", user: auth });

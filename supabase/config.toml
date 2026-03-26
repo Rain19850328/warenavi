@@ -2,4 +2,4 @@ project_id = "warenavi"
 # Trigger backend deployment workflow after Supabase secret updates.
 
 [functions.warehouse-api]
-verify_jwt = true
+verify_jwt = false
