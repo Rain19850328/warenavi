@@ -50,7 +50,7 @@ Repository variables:
 변경 후:
 - 프론트는 `web/config.js`의 `API_BASE`를 호출
 - 백엔드는 Supabase Edge Function이 HTTP `/config`, `/cells`, `/items`, `/items_with_stock`, `/search_racks`, `/inbound`, `/outbound`, `/move`, `/set_location`를 처리
-- 실데이터는 Supabase Postgres 테이블 `warehouse_items`, `warehouse_racks`, `daily_stock`를 사용
+- 실데이터는 Supabase Postgres 테이블 `items`, `warehouse_racks`, `daily_stock`를 사용
 
 ## 남은 수동 작업
 
@@ -66,5 +66,5 @@ Repository variables:
 2. GitHub secrets / vars 입력
 3. 빈 프로젝트에 이 저장소 push
 4. Actions가 스키마를 생성한 뒤
-5. MySQL 데이터를 `warehouse_items`, `warehouse_racks`, `daily_stock`로 이관
+5. MySQL 데이터를 `items`, `warehouse_racks`, `daily_stock`로 이관
 6. 프론트에서 실제 조회/입출고/이동 테스트
