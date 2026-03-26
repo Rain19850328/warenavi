@@ -1,0 +1,68 @@
+MySQL -> Supabase reference data sync
+
+Purpose
+- Keep Supabase public.items in sync with MySQL items.items
+- Keep Supabase public.daily_stock in sync with MySQL salesdb.daily_stock
+- Leave warehouse_racks and warehouse_movements in Supabase only
+
+Files
+- sync_mysql_reference_data.py
+- sync_mysql_reference_data.ps1
+
+Required environment variables
+- SUPABASE_DB_URL
+- Optional override:
+  ITEMS_DB_URL
+  SALES_DB_URL
+
+Default source URLs
+- ITEMS_DB_URL = mysql+pymysql://rain:8520@192.168.0.5:3306/items
+- SALES_DB_URL = mysql+pymysql://rain:8520@192.168.0.5:3306/salesdb
+
+Recommended sync policy
+- items: full upsert every run
+- daily_stock: replace and reload recent 7 days every run
+- full daily_stock reload: manual only
+
+Basic usage
+1. Dry run
+   powershell:
+   $env:SUPABASE_DB_URL="postgresql://..."
+   .\sync_mysql_reference_data.ps1 -DryRun
+
+2. Normal sync, recent 7 days
+   powershell:
+   $env:SUPABASE_DB_URL="postgresql://..."
+   .\sync_mysql_reference_data.ps1
+
+3. Normal sync, recent 14 days
+   powershell:
+   $env:SUPABASE_DB_URL="postgresql://..."
+   .\sync_mysql_reference_data.ps1 -DailyStockDays 14
+
+4. Explicit date range
+   powershell:
+   $env:SUPABASE_DB_URL="postgresql://..."
+   .\sync_mysql_reference_data.ps1 -FromDate 2026-03-20 -ToDate 2026-03-26
+
+5. Full daily_stock reload
+   powershell:
+   $env:SUPABASE_DB_URL="postgresql://..."
+   .\sync_mysql_reference_data.ps1 -FullDailyStock
+
+Operational notes
+- items sync uses upsert by code
+- daily_stock sync deletes the selected stock_date range in Supabase, then inserts MySQL source rows again
+- this makes recent-day corrections in MySQL reflect exactly in Supabase
+- do not run full daily_stock reload too frequently unless necessary
+
+Recommended Windows Task Scheduler command
+- Program/script:
+  powershell.exe
+- Arguments:
+  -ExecutionPolicy Bypass -File "D:\02. program\warehouse_service_ver2\sync_mysql_reference_data.ps1" -DailyStockDays 7
+
+Recommended schedule
+- Every 15 minutes during working hours
+- Optionally once overnight with a wider range:
+  -DailyStockDays 30
