@@ -18,7 +18,7 @@ body.auth-open { overflow: hidden; }
 .auth-shell{
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 12px;
   margin-bottom: 12px;
   padding: 10px 14px;
@@ -29,8 +29,8 @@ body.auth-open { overflow: hidden; }
 .auth-shell__user{
   display: flex;
   align-items: center;
-  gap: 8px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 .auth-shell__user strong{
   font-size: 15px;
@@ -50,6 +50,9 @@ body.auth-open { overflow: hidden; }
   line-height: 1;
   cursor: pointer;
   flex: 0 0 auto;
+}
+.auth-shell__logout{
+  margin-left: auto;
 }
 .auth-screen{
   position: fixed;

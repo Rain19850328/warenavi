@@ -185,8 +185,8 @@
     authShell.innerHTML = `
       <div class="auth-shell__user">
         <strong id="authShellName"></strong>
-        <button id="authLogoutBtn" type="button" class="auth-shell__logout">로그아웃</button>
       </div>
+      <button id="authLogoutBtn" type="button" class="auth-shell__logout">로그아웃</button>
     `;
     container.prepend(authShell);
 
