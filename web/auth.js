@@ -235,6 +235,39 @@
     `;
     document.body.append(authScreen);
 
+    const authTitle = authScreen.querySelector(".auth-card__head h1");
+    const authDesc = authScreen.querySelector(".auth-card__head p");
+    const authTabs = authScreen.querySelector(".auth-tabs");
+    const authSigninForm = document.getElementById("authSigninForm");
+    const authSigninSubmit = document.getElementById("authSigninSubmit");
+    const authSignupSubmit = document.getElementById("authSignupSubmit");
+    const authTabSignin = document.getElementById("authTabSignin");
+    const authTabSignup = document.getElementById("authTabSignup");
+    const authSigninLabels = authScreen.querySelectorAll("#authSigninForm label span");
+    const authSignupLabels = authScreen.querySelectorAll("#authSignupForm label span");
+    const authSignupName = document.getElementById("authSignupName");
+    const authStatus = document.getElementById("authStatus");
+    const authHead = authScreen.querySelector(".auth-card__head");
+
+    if (authTitle) authTitle.textContent = "SELLING-ON 창고네비";
+    if (authDesc) authDesc.hidden = true;
+    if (authSigninSubmit) authSigninSubmit.textContent = "로그인";
+    if (authSignupSubmit) authSignupSubmit.textContent = "회원가입 완료";
+    if (authTabSignin) authTabSignin.textContent = "로그인으로";
+    if (authTabSignup) authTabSignup.textContent = "회원가입";
+    if (authSigninLabels[0]) authSigninLabels[0].textContent = "이메일";
+    if (authSigninLabels[1]) authSigninLabels[1].textContent = "비밀번호";
+    if (authSignupLabels[0]) authSignupLabels[0].textContent = "이름";
+    if (authSignupLabels[1]) authSignupLabels[1].textContent = "이메일";
+    if (authSignupLabels[2]) authSignupLabels[2].textContent = "비밀번호";
+    if (authSignupName) authSignupName.placeholder = "작업자 이름";
+    if (authStatus && authHead) {
+      authHead.after(authStatus);
+    }
+    if (authTabs && authSigninForm) {
+      authSigninForm.after(authTabs);
+    }
+
     document.getElementById("authTabSignin")?.addEventListener("click", () => switchMode("signin"));
     document.getElementById("authTabSignup")?.addEventListener("click", () => switchMode("signup"));
     document.getElementById("authLogoutBtn")?.addEventListener("click", () => {
@@ -273,6 +306,8 @@
   }
 
   function switchMode(mode) {
+    const heading = document.querySelector("#authScreen .auth-card__head h1");
+    const desc = document.querySelector("#authScreen .auth-card__head p");
     const signinTab = document.getElementById("authTabSignin");
     const signupTab = document.getElementById("authTabSignup");
     const signinForm = document.getElementById("authSigninForm");
@@ -280,10 +315,18 @@
     if (!signinTab || !signupTab || !signinForm || !signupForm) return;
 
     const signinActive = mode !== "signup";
-    signinTab.classList.toggle("is-active", signinActive);
-    signupTab.classList.toggle("is-active", !signinActive);
+    signinTab.hidden = signinActive;
+    signupTab.hidden = !signinActive;
+    signinTab.classList.remove("is-active");
+    signupTab.classList.remove("is-active");
     signinForm.hidden = !signinActive;
     signupForm.hidden = signinActive;
+    if (heading) {
+      heading.textContent = signinActive ? "SELLING-ON 창고네비" : "회원가입";
+    }
+    if (desc) {
+      desc.hidden = true;
+    }
     setStatus("");
 
     const focusTarget = signinActive
@@ -376,7 +419,7 @@
       const email = document.getElementById("authSignupEmail")?.value?.trim() || "";
       const password = document.getElementById("authSignupPassword")?.value || "";
 
-      const data = await authRequest("signup", {
+      await authRequest("signup", {
         method: "POST",
         body: {
           email,
@@ -385,23 +428,12 @@
         },
       });
 
-      if (data.access_token) {
-        saveSession(data);
-        try {
-          await hydrateUser();
-        } catch (error) {
-          console.warn("hydrateUser failed after signup", error);
-        }
-        closeAuthScreen();
-        resolveAuthGate();
-        window.location.reload();
-        return;
-      }
-
       switchMode("signin");
-      setStatus("회원가입이 완료되었습니다. 이메일 확인 후 로그인해 주세요.", false);
       const signinEmail = document.getElementById("authSigninEmail");
       if (signinEmail) signinEmail.value = email;
+      setStatus("회원가입이 완료되었습니다. 이메일을 확인해 주세요.", false);
+      const signinPassword = document.getElementById("authSigninPassword");
+      if (signinPassword) signinPassword.value = "";
     } catch (error) {
       setStatus(error.message || String(error), true);
     } finally {

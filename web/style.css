@@ -78,18 +78,22 @@ body.auth-open { overflow: hidden; }
 .auth-card__head h1{
   margin: 0;
   font-size: 26px;
+  text-align: center;
 }
 .auth-card__head p{
+  display: none;
   margin: 10px 0 0;
   font-size: 13px;
   line-height: 1.5;
   color: #475569;
 }
+.auth-card__head + .auth-status{
+  margin-top: 14px;
+}
 .auth-tabs{
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-top: 18px;
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
 }
 .auth-tabs button,
 .auth-form button{
@@ -100,13 +104,15 @@ body.auth-open { overflow: hidden; }
   cursor: pointer;
 }
 .auth-tabs button{
-  background: #f8fafc;
-  color: #475569;
-}
-.auth-tabs button.is-active{
-  border-color: #0ea5e9;
-  background: #0ea5e9;
-  color: #fff;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
 }
 .auth-status{
   margin: 16px 0 0;
@@ -145,9 +151,17 @@ body.auth-open { overflow: hidden; }
 }
 .auth-form button{
   margin-top: 4px;
+  width: 100%;
   background: linear-gradient(135deg, #0ea5e9, #2563eb);
   border-color: #2563eb;
   color: #fff;
+}
+.auth-form__switch{
+  margin-top: 0 !important;
+}
+.auth-tabs button[hidden],
+.auth-form[hidden]{
+  display: none !important;
 }
 .auth-form input:focus{
   outline: none;
