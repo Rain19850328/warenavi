@@ -185,9 +185,8 @@
     authShell.innerHTML = `
       <div class="auth-shell__user">
         <strong id="authShellName"></strong>
-        <span id="authShellEmail"></span>
+        <button id="authLogoutBtn" type="button" class="auth-shell__logout">로그아웃</button>
       </div>
-      <button id="authLogoutBtn" type="button">로그아웃</button>
     `;
     container.prepend(authShell);
 
@@ -318,20 +317,17 @@
 
     const shell = document.getElementById("authShell");
     const nameEl = document.getElementById("authShellName");
-    const emailEl = document.getElementById("authShellEmail");
-    if (!shell || !nameEl || !emailEl) return;
+    if (!shell || !nameEl) return;
 
     const user = session?.user;
     if (!user) {
       shell.hidden = true;
       nameEl.textContent = "";
-      emailEl.textContent = "";
       return;
     }
 
     shell.hidden = false;
     nameEl.textContent = getStoredUserName() || "작업자";
-    emailEl.textContent = user.email || "";
   }
 
   function resolveAuthGate() {
