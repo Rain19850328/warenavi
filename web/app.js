@@ -1688,7 +1688,6 @@ async function openNewInboundProcessDialog(mode, preserveDraft=false){
       NEW_INBOUND.picking = true;
       NEW_INBOUND.reopenAfterPick = true;
       closeDialog(dlg);
-      alert('현황판에서 입고할 렉을 선택하세요.');
     };
   }
 
