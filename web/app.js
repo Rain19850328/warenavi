@@ -1431,6 +1431,37 @@ async function importNewInboundExcel(file){
   }
 }
 
+async function resetNewInboundDate(){
+  const dlg = ensureNewInboundDialog();
+  const dateInput = dlg.querySelector('#newInboundDate');
+  const dateText = (dateInput?.value || NEW_INBOUND.date || todayYmd()).trim();
+  if (!dateText) {
+    alert('초기화할 날짜를 먼저 선택하세요.');
+    return;
+  }
+  if (!confirm(`${dateText} 날짜의 신규입고 데이터를 초기화할까요?`)) {
+    return;
+  }
+  try {
+    setDialogPending(dlg, true, '#newInboundImport', '초기화 중...');
+    const data = await postJSON(`${API_BASE}/new_inbound_list/import`, {
+      date: dateText,
+      filename: '',
+      rows: [],
+    });
+    NEW_INBOUND.date = data.date || dateText;
+    NEW_INBOUND.items = data.items || [];
+    NEW_INBOUND.selectedId = null;
+    dlg.dataset.sourceName = '저장된 리스트';
+    if (dateInput) dateInput.value = NEW_INBOUND.date;
+    renderNewInboundTable();
+  } catch (err) {
+    alert('신규입고 데이터 초기화 실패: ' + (err.message || err));
+  } finally {
+    setDialogPending(dlg, false, '#newInboundImport');
+  }
+}
+
 function ensureNewInboundDialog(){
   let dlg = document.getElementById('dlgNewInbound');
   if (!dlg) {
@@ -1442,6 +1473,7 @@ function ensureNewInboundDialog(){
         <div class="row new-inbound-toolbar">
           <label class="new-inbound-date-field">날짜 <input id="newInboundDate" type="date" /></label>
           <button id="newInboundImport" type="button">불러오기</button>
+          <button id="newInboundReset" type="button">초기화</button>
           <input id="newInboundFile" type="file" accept=".xlsx,.xlsm,.xltx,.xltm" hidden />
           <div id="newInboundSource" class="muted"></div>
         </div>
@@ -1472,6 +1504,7 @@ function ensureNewInboundDialog(){
     dlg.__bound = true;
     const dateInput = dlg.querySelector('#newInboundDate');
     const importBtn = dlg.querySelector('#newInboundImport');
+    const resetBtn = dlg.querySelector('#newInboundReset');
     const closeBtn = dlg.querySelector('#btnNewInboundClose');
     const displayBtn = dlg.querySelector('#btnNewInboundDisplay');
     const inboundBtn = dlg.querySelector('#btnNewInboundInbound');
@@ -1504,6 +1537,10 @@ function ensureNewInboundDialog(){
       });
     }
 
+    resetBtn?.addEventListener('click', ()=>{
+      resetNewInboundDate().catch(err=>alert(err.message || err));
+    });
+
     fileInput?.addEventListener('change', ()=>{
       const file = fileInput.files && fileInput.files[0];
       importNewInboundExcel(file);
@@ -1521,9 +1558,13 @@ function ensureNewInboundDialog(){
   }
 
   const importBtn = dlg.querySelector('#newInboundImport');
+  const resetBtn = dlg.querySelector('#newInboundReset');
   if (importBtn) {
     importBtn.disabled = !isDesktopDevice();
     importBtn.title = isDesktopDevice() ? '엑셀 파일을 불러옵니다.' : 'PC에서만 엑셀 불러오기를 사용할 수 있습니다.';
+  }
+  if (resetBtn) {
+    resetBtn.title = '선택한 날짜의 신규입고 데이터를 비웁니다.';
   }
   return dlg;
 }
