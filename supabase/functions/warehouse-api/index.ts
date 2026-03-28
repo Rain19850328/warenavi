@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import * as xlsx from "npm:xlsx";
 
 const FUNCTION_PREFIXES = [
   "/functions/v1/warehouse-api",
@@ -50,6 +51,121 @@ function getPath(url: URL) {
 function getPositiveInt(value: string | null, fallback: number) {
   const parsed = Number.parseInt(value || "", 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
+}
+
+function normalizeHeader(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, "").trim().toLowerCase();
+}
+
+function toInt(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.round(value);
+  const parsed = Number.parseFloat(String(value ?? "").replace(/,/g, "").trim());
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(parsed);
+}
+
+function unique<T>(values: T[]) {
+  return [...new Set(values)];
+}
+
+function chunk<T>(values: T[], size: number) {
+  const output: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    output.push(values.slice(index, index + size));
+  }
+  return output;
+}
+
+type ParsedInboundItem = {
+  id: string;
+  sku_code: string;
+  product_name: string;
+  box_qty: number;
+  inbound_qty: number;
+  pending_qty: number;
+};
+
+async function lookupSkuCodesByName(names: string[]) {
+  const mapping = new Map<string, string>();
+  const targets = unique(
+    names
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+
+  for (const group of chunk(targets, 200)) {
+    const { data, error } = await supabase
+      .from("items")
+      .select("code,name")
+      .in("name", group);
+    if (error) throw error;
+
+    for (const row of data || []) {
+      const name = String(row.name || "").trim();
+      const code = String(row.code || "").trim();
+      if (name && code && !mapping.has(name)) {
+        mapping.set(name, code);
+      }
+    }
+  }
+
+  return mapping;
+}
+
+async function parseNewInboundWorkbook(contentBase64: string): Promise<ParsedInboundItem[]> {
+  let bytes: Uint8Array;
+  try {
+    bytes = Uint8Array.from(atob(contentBase64), (char) => char.charCodeAt(0));
+  } catch (_) {
+    throw new Error("엑셀 파일 디코딩에 실패했습니다.");
+  }
+
+  const workbook = xlsx.read(bytes, { type: "array" });
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName) {
+    throw new Error("엑셀 시트를 찾을 수 없습니다.");
+  }
+
+  const sheet = workbook.Sheets[firstSheetName];
+  const rows = xlsx.utils.sheet_to_json<(string | number | null)[]>(sheet, {
+    header: 1,
+    raw: false,
+    blankrows: false,
+  });
+
+  const headerRow = rows[1] || [];
+  const productIndex = headerRow.findIndex((value) => normalizeHeader(value).includes("품명"));
+  const inboundIndex = headerRow.findIndex((value) => normalizeHeader(value).includes("상세수량"));
+  const boxIndex = headerRow.findIndex((value) => normalizeHeader(value).includes("박스수"));
+
+  if (productIndex < 0 || inboundIndex < 0 || boxIndex < 0) {
+    throw new Error("엑셀 2행에서 품명, 상세수량, 박스수 컬럼을 찾을 수 없습니다.");
+  }
+
+  const parsed = rows
+    .slice(2)
+    .map((row) => {
+      const productName = String(row?.[productIndex] ?? "").trim();
+      if (!productName) return null;
+      const boxQty = toInt(row?.[boxIndex]);
+      const inboundQty = toInt(row?.[inboundIndex]);
+      return {
+        id: crypto.randomUUID(),
+        sku_code: "",
+        product_name: productName,
+        box_qty: boxQty,
+        inbound_qty: inboundQty,
+        pending_qty: inboundQty,
+      } satisfies ParsedInboundItem;
+    })
+    .filter((row): row is ParsedInboundItem => Boolean(row));
+
+  const skuMap = await lookupSkuCodesByName(parsed.map((row) => row.product_name));
+  for (const row of parsed) {
+    row.sku_code = skuMap.get(row.product_name) || "";
+  }
+
   return parsed;
 }
 
@@ -140,6 +256,46 @@ Deno.serve(async (req) => {
       const { data, error } = await supabase.rpc("warehouse_search_racks", {
         p_q: url.searchParams.get("q") || "",
         p_limit: getPositiveInt(url.searchParams.get("limit"), 500),
+      });
+      if (error) throw error;
+      return json(req, data);
+    }
+
+    if (req.method === "GET" && path === "/new_inbound_list") {
+      const date = (url.searchParams.get("date") || "").trim();
+      if (!date) throw new Error("date is required");
+      const { data, error } = await supabase.rpc("warehouse_get_new_inbound_list", {
+        p_date: date,
+      });
+      if (error) throw error;
+      return json(req, data);
+    }
+
+    if (req.method === "POST" && path === "/new_inbound_list/import") {
+      const payload = await req.json();
+      const date = String(payload.date || "").trim();
+      if (!date) throw new Error("date is required");
+      const items = await parseNewInboundWorkbook(String(payload.content_base64 || ""));
+      const { data, error } = await supabase.rpc("warehouse_replace_new_inbound_list", {
+        p_date: date,
+        p_source_name: String(payload.filename || ""),
+        p_items: items,
+      });
+      if (error) throw error;
+      return json(req, data);
+    }
+
+    if (req.method === "POST" && path === "/new_inbound_list/process") {
+      const payload = await req.json();
+      const { data, error } = await supabase.rpc("warehouse_process_new_inbound_item", {
+        p_date: payload.date,
+        p_entry_id: payload.entry_id,
+        p_action: payload.action,
+        p_qty: payload.qty,
+        p_rack_code: payload.rack_code || null,
+        p_actor_user_id: auth.userId,
+        p_actor_email: auth.email,
+        p_actor_name: auth.name,
       });
       if (error) throw error;
       return json(req, data);

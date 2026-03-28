@@ -1,15 +1,24 @@
 # app/main.py
 # -*- coding: utf-8 -*-
-import re, datetime, os
+import base64
+import datetime
+import io
+import json
+import os
+import re
+import uuid
 from dataclasses import dataclass
+from pathlib import Path
+from threading import Lock
 from typing import Dict, List, Tuple, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from openpyxl import load_workbook
 from pydantic import BaseModel
-from sqlalchemy import create_engine, text
+from sqlalchemy import bindparam, create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
 def model_to_dict(m):
@@ -17,6 +26,8 @@ def model_to_dict(m):
   return m.model_dump() if hasattr(m, "model_dump") else m.dict()
 
 DB_URL = os.environ.get("ITEMS_DB_URL", "mysql+pymysql://rain:8520@192.168.0.5:3306/items")
+MOPS_DB_URL = os.environ.get("MOPS_DB_URL", "mysql+pymysql://rain:8520@192.168.0.5:3306/mops_2026")
+NEW_INBOUND_STORE_PATH = Path(__file__).resolve().parent / "data" / "new_inbound_lists.json"
 SALES_DB_URL = os.environ.get("SALES_DB_URL", "mysql+pymysql://rain:8520@192.168.0.5:3306/salesdb")  # ★ 추가
 
 
@@ -777,6 +788,196 @@ class FakeProvider(DataProvider):
         return
     raise RuntimeError("아이템 코드를 찾을 수 없습니다.")  
 
+class NewInboundStore:
+  def __init__(self, path: Path):
+    self.path = path
+    self._lock = Lock()
+
+  def _default_payload(self) -> dict:
+    return {"days": {}}
+
+  def _read(self) -> dict:
+    if not self.path.exists():
+      return self._default_payload()
+    try:
+      return json.loads(self.path.read_text(encoding="utf-8"))
+    except Exception:
+      return self._default_payload()
+
+  def _write(self, payload: dict) -> None:
+    self.path.parent.mkdir(parents=True, exist_ok=True)
+    self.path.write_text(
+      json.dumps(payload, ensure_ascii=False, indent=2),
+      encoding="utf-8",
+    )
+
+  def get_day(self, date_text: str) -> dict:
+    with self._lock:
+      payload = self._read()
+      day = payload.get("days", {}).get(date_text)
+      if not day:
+        return {"date": date_text, "updated_at": "", "items": []}
+      return json.loads(json.dumps(day, ensure_ascii=False))
+
+  def replace_day(self, date_text: str, items: List[dict], source_name: str = "") -> dict:
+    with self._lock:
+      payload = self._read()
+      payload.setdefault("days", {})
+      day = {
+        "date": date_text,
+        "updated_at": datetime.datetime.now().isoformat(),
+        "source_name": source_name or "",
+        "items": items,
+      }
+      payload["days"][date_text] = day
+      self._write(payload)
+      return json.loads(json.dumps(day, ensure_ascii=False))
+
+  def process_item(self, date_text: str, entry_id: str, qty: int, action: str, rack_code: str = "") -> dict:
+    with self._lock:
+      payload = self._read()
+      day = payload.setdefault("days", {}).get(date_text)
+      if not day:
+        raise RuntimeError("해당 날짜의 신규입고리스트가 없습니다.")
+
+      found = None
+      for item in day.get("items", []):
+        if str(item.get("id") or "") == str(entry_id):
+          found = item
+          break
+      if not found:
+        raise RuntimeError("선택한 항목을 찾을 수 없습니다.")
+
+      pending_qty = int(found.get("pending_qty") or 0)
+      if qty <= 0:
+        raise RuntimeError("수량은 1 이상이어야 합니다.")
+      if qty > pending_qty:
+        raise RuntimeError("미처리수량보다 큰 수량은 처리할 수 없습니다.")
+
+      found["pending_qty"] = pending_qty - qty
+      found["last_action"] = {
+        "type": action,
+        "qty": qty,
+        "rack_code": rack_code or "",
+        "processed_at": datetime.datetime.now().isoformat(),
+      }
+      found.setdefault("logs", []).append(found["last_action"])
+      day["updated_at"] = datetime.datetime.now().isoformat()
+      payload["days"][date_text] = day
+      self._write(payload)
+      return json.loads(json.dumps(day, ensure_ascii=False))
+
+
+_mops_lookup_engine = None
+
+def _parse_inbound_date(date_text: str) -> str:
+  try:
+    return datetime.date.fromisoformat((date_text or "").strip()).isoformat()
+  except Exception:
+    raise RuntimeError("날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식이어야 합니다.")
+
+def _normalize_header(value) -> str:
+  return re.sub(r"\s+", "", str(value or "")).strip().lower()
+
+def _to_number(value) -> int:
+  if value is None:
+    return 0
+  if isinstance(value, bool):
+    return int(value)
+  if isinstance(value, (int, float)):
+    return int(round(float(value)))
+  text_value = str(value).strip().replace(",", "")
+  if not text_value:
+    return 0
+  try:
+    return int(round(float(text_value)))
+  except Exception:
+    return 0
+
+def _get_lookup_engines() -> List:
+  global _mops_lookup_engine
+  engines = []
+  if _mops_lookup_engine is None:
+    try:
+      _mops_lookup_engine = create_engine(
+        MOPS_DB_URL,
+        pool_pre_ping=True,
+        future=True,
+        pool_recycle=1800,
+        isolation_level="READ COMMITTED",
+      )
+    except Exception:
+      _mops_lookup_engine = False
+  if _mops_lookup_engine:
+    engines.append(_mops_lookup_engine)
+  if isinstance(provider, MySQLProvider):
+    engines.append(provider.engine)
+  return engines
+
+def _lookup_item_codes_by_name(names: List[str]) -> Dict[str, str]:
+  unique_names = sorted({(name or "").strip() for name in names if (name or "").strip()})
+  if not unique_names:
+    return {}
+  sql = text("SELECT code, name FROM items WHERE name IN :names ORDER BY code ASC")
+  sql = sql.bindparams(bindparam("names", expanding=True))
+  mapping: Dict[str, str] = {}
+  for engine in _get_lookup_engines():
+    try:
+      with engine.connect() as conn:
+        for code, name in conn.execute(sql, {"names": unique_names}):
+          name_text = (name or "").strip()
+          code_text = (code or "").strip()
+          if name_text and code_text and name_text not in mapping:
+            mapping[name_text] = code_text
+      if mapping:
+        break
+    except Exception:
+      continue
+  return mapping
+
+def _parse_new_inbound_workbook(content_bytes: bytes) -> List[dict]:
+  workbook = load_workbook(io.BytesIO(content_bytes), data_only=True, read_only=True)
+  sheet = workbook.active
+  headers = {
+    idx: _normalize_header(sheet.cell(row=2, column=idx).value)
+    for idx in range(1, sheet.max_column + 1)
+  }
+
+  product_col = next((idx for idx, title in headers.items() if "품명" in title), None)
+  detail_qty_col = next((idx for idx, title in headers.items() if "상세수량" in title), None)
+  box_qty_col = next((idx for idx, title in headers.items() if "박스수" in title), None)
+
+  if not product_col or not detail_qty_col or not box_qty_col:
+    raise RuntimeError("엑셀 2행에서 품명, 상세수량, 박스수 컬럼을 찾을 수 없습니다.")
+
+  rows: List[dict] = []
+  names: List[str] = []
+  for row_idx in range(3, sheet.max_row + 1):
+    product_name = str(sheet.cell(row=row_idx, column=product_col).value or "").strip()
+    if not product_name:
+      continue
+    box_qty = _to_number(sheet.cell(row=row_idx, column=box_qty_col).value)
+    inbound_qty = _to_number(sheet.cell(row=row_idx, column=detail_qty_col).value)
+    row_item = {
+      "id": uuid.uuid4().hex,
+      "sku_code": "",
+      "product_name": product_name,
+      "box_qty": box_qty,
+      "inbound_qty": inbound_qty,
+      "pending_qty": inbound_qty,
+      "logs": [],
+    }
+    rows.append(row_item)
+    names.append(product_name)
+
+  workbook.close()
+
+  code_map = _lookup_item_codes_by_name(names)
+  for row_item in rows:
+    row_item["sku_code"] = code_map.get(row_item["product_name"], "")
+  return rows
+
+
 # ---------- Pydantic Models for API ----------
 class CellItemModel(BaseModel):
   sku: str
@@ -848,8 +1049,26 @@ class SearchResultsResponse(BaseModel):
   q: str
   results: List[SearchResultModel]
 
+class NewInboundImportRequest(BaseModel):
+  date: str
+  filename: str = ""
+  content_base64: str
+
+class NewInboundProcessRequest(BaseModel):
+  date: str
+  entry_id: str
+  action: str
+  qty: int
+  rack_code: str = ""
+
+class NewInboundListResponse(BaseModel):
+  date: str
+  updated_at: str = ""
+  source_name: str = ""
+  items: List[dict]
+
 # ---------- FastAPI ----------
-app = FastAPI(title="Warehouse PWA API", version="1.2.1")
+app = FastAPI(title="Warehouse PWA API", version="1.3.0")
 app.add_middleware(
   CORSMiddleware,
   allow_origins=["*"],
@@ -872,6 +1091,7 @@ def make_provider() -> DataProvider:
     return FakeProvider()
 
 provider: DataProvider = make_provider()
+new_inbound_store = NewInboundStore(NEW_INBOUND_STORE_PATH)
 
 @app.get("/api/config", response_model=ConfigResponse)
 def get_config():
@@ -940,6 +1160,61 @@ def get_items_with_stock(q: str = "", limit: int = 300):
 def api_search_racks(q: str = "", limit: int = 500):
   results = provider.search_racks(q, limit=limit)
   return SearchResultsResponse(q=q, results=results)
+
+@app.get("/api/new_inbound_list", response_model=NewInboundListResponse)
+def get_new_inbound_list(date: str):
+  try:
+    date_text = _parse_inbound_date(date)
+    return new_inbound_store.get_day(date_text)
+  except Exception as e:
+    raise HTTPException(400, detail=str(e))
+
+@app.post("/api/new_inbound_list/import", response_model=NewInboundListResponse)
+def post_new_inbound_list_import(req: NewInboundImportRequest):
+  try:
+    date_text = _parse_inbound_date(req.date)
+    content_bytes = base64.b64decode(req.content_base64)
+    items = _parse_new_inbound_workbook(content_bytes)
+    return new_inbound_store.replace_day(date_text, items, source_name=req.filename)
+  except Exception as e:
+    raise HTTPException(400, detail=str(e))
+
+@app.post("/api/new_inbound_list/process")
+def post_new_inbound_list_process(req: NewInboundProcessRequest):
+  try:
+    date_text = _parse_inbound_date(req.date)
+    action = (req.action or "").strip().lower()
+    if action not in ("display", "inbound"):
+      raise RuntimeError("지원하지 않는 처리 방식입니다.")
+
+    current_day = new_inbound_store.get_day(date_text)
+    item = next((entry for entry in current_day.get("items", []) if str(entry.get("id") or "") == str(req.entry_id)), None)
+    if not item:
+      raise RuntimeError("선택한 항목을 찾을 수 없습니다.")
+
+    sku_code = str(item.get("sku_code") or "").strip()
+    if not sku_code:
+      raise RuntimeError("상품코드가 없는 항목은 처리할 수 없습니다.")
+
+    updated_row = None
+    rack_code = ""
+    if action == "inbound":
+      rack_code = (req.rack_code or "").strip()
+      if not rack_code:
+        raise RuntimeError("입고 처리에는 위치 선택이 필요합니다.")
+      rack_norm = to_canonical_code(rack_code)
+      provider.inbound(rack_norm, sku_code, req.qty)
+      parsed = parse_rack_code(rack_code)
+      updated_row = parsed[0] if parsed else None
+
+    updated_day = new_inbound_store.process_item(date_text, req.entry_id, req.qty, action, rack_code=rack_code)
+    response = {"ok": True, "date": date_text, "list": updated_day}
+    if updated_row:
+      response["row"] = updated_row
+      response["cells"] = model_to_dict(get_cells(row=updated_row))
+    return response
+  except Exception as e:
+    raise HTTPException(400, detail=str(e))
 
 @app.post("/api/inbound")
 def post_inbound(req: InboundRequest):

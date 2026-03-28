@@ -8,18 +8,18 @@
   <link rel="icon" href="icons/sellingon_icon.ico" type="image/x-icon">
   <link rel="shortcut icon" href="icons/sellingon_icon.ico" type="image/x-icon">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
-  <title>창고 현황판</title>
-  <link rel="stylesheet" href="style.css?v=20260327-02">
+  <title>창고네비</title>
+  <link rel="stylesheet" href="style.css?v=20260327-03">
 </head>
 <body>
   <div class="container">
     <header class="toolbar toolbar-3rows">
       <div class="line line-top">
-        <label for="rowSelect">행</label>
+        <label for="rowSelect">열</label>
         <select id="rowSelect"></select>
       </div>
       <div class="line line-search">
-        <input id="search" type="text" placeholder="SKU/품명/위치코드 검색…" />
+        <input id="search" type="text" placeholder="SKU/상품명/위치코드 검색" />
         <div id="searchSuggest" class="suggest" hidden></div>
       </div>
       <div class="line line-actions">
@@ -31,10 +31,9 @@
 
     <main id="rack" aria-live="polite"></main>
 
-    <!-- 검색결과 리스트 (현황판 아래) -->
     <section id="searchResults" class="detail" hidden>
       <div class="detail-header">
-        <h3>선택 결과</h3>
+        <h3>검색 결과</h3>
         <div class="muted">검색 결과: <span id="resultsMeta">-</span></div>
       </div>
       <div class="detail-body">
@@ -47,8 +46,8 @@
 
     <section id="detail" class="detail">
       <div class="detail-header">
-        <h3 id="selTitle">선택된 위치: -</h3>
-        <div id="selStats" class="muted">적재율: - · 용량: - · 사용: - · 남은공간: -</div>
+        <h3 id="selTitle">선택한 위치: -</h3>
+        <div id="selStats" class="muted">적재율: - · 총용량: - · 사용: - · 여유공간: -</div>
         <div class="bar"><div id="barFill" class="bar-fill" style="width:0%"></div></div>
       </div>
       <div class="detail-body">
@@ -66,8 +65,8 @@
 
     <section id="movementLog" class="detail" hidden>
       <div class="detail-header">
-        <h3>Recent Activity</h3>
-        <div class="muted">Latest warehouse actions by logged-in users</div>
+        <h3>최근 작업</h3>
+        <div class="muted">로그인한 사용자의 최근 창고 작업</div>
       </div>
       <div class="detail-body">
         <table id="tblMovements">
@@ -88,7 +87,7 @@
   </div>
 
   <script src="config.js"></script>
-  <script src="auth.js?v=20260327-02" defer></script>
-  <script src="app.js?v=20260327-02" defer></script>
+  <script src="auth.js?v=20260327-03" defer></script>
+  <script src="app.js?v=20260327-03" defer></script>
 </body>
 </html>

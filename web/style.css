@@ -465,9 +465,77 @@ dialog button#movePick{
 }
 #tblMovements tbody tr:hover{ background: #f8fafc; }
 
+.new-inbound-dialog{
+  width: min(980px, calc(100vw - 32px));
+}
+.new-inbound-toolbar{
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.new-inbound-date-field{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.new-inbound-date-field input[type="date"]{
+  min-width: 160px;
+}
+.new-inbound-table-wrap{
+  padding: 0 16px 16px 16px;
+}
+#tblNewInbound{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+#tblNewInbound thead th{
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  padding: 8px 10px;
+  background: #f1f5f9;
+  color: #334155;
+  border-bottom: 1px solid #e2e8f0;
+}
+#tblNewInbound td{
+  padding: 8px 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+#tblNewInbound tbody tr{
+  cursor: pointer;
+}
+#tblNewInbound tbody tr:hover{
+  background: #f8fafc;
+}
+#tblNewInbound tbody tr.sel{
+  background: #e0f2fe;
+}
+.new-inbound-actions{
+  display: flex !important;
+  justify-content: flex-end;
+}
+.new-inbound-actions button{
+  min-width: 88px;
+}
+.new-inbound-process-dialog #newInboundProcessMeta{
+  white-space: pre-line;
+}
+.new-inbound-process-dialog #newInboundRackRow{
+  justify-content: space-between;
+}
+
 @media (max-width: 720px){
   .auth-shell{
     padding: 9px 12px;
   }
   .auth-form button{ width: 100%; }
+  .new-inbound-actions{
+    flex-wrap: wrap;
+  }
+  .new-inbound-actions button{
+    flex: 1 1 calc(50% - 8px);
+  }
 }

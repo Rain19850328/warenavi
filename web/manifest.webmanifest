@@ -1,6 +1,6 @@
 {
-  "name": "셀링온물류관리",
-  "short_name": "물류관리",
+  "name": "창고네비",
+  "short_name": "창고네비",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

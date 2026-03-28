@@ -804,6 +804,16 @@ const requestSuggest = debounce(async (term)=>{
 
 /* ---------- Move picking state ---------- */
 const MOVE = { active:false, sourceCode:null, sku:null, maxQty:0, targetCode:null, reopenAfterPick:false };
+const NEW_INBOUND = {
+  date: '',
+  items: [],
+  selectedId: null,
+  targetRackCode: '',
+  picking: false,
+  reopenAfterPick: false,
+  actionMode: '',
+  draftQty: '',
+};
 
 /* ---------- rack render ---------- */
 function renderRack() {
@@ -889,10 +899,19 @@ function renderRack() {
         mid.textContent = `${rate}%`;
         cell.append(mid);
 
-        if (MOVE.active && MOVE.targetCode === ci.code) cell.classList.add('target');
+        const newInboundTargetVisible =
+          NEW_INBOUND.targetRackCode &&
+          (NEW_INBOUND.picking || (NEW_INBOUND.actionMode === 'inbound' && document.getElementById('dlgNewInboundProcess')?.open));
+        if ((MOVE.active && MOVE.targetCode === ci.code) || (newInboundTargetVisible && NEW_INBOUND.targetRackCode === ci.code)) {
+          cell.classList.add('target');
+        }
         if (!MOVE.active && firstSelectedCode && firstSelectedCode === ci.code) cell.classList.add('selected');
 
         cell.addEventListener('click', ()=> {
+          if (NEW_INBOUND.picking) {
+            setNewInboundTarget(ci, cell);
+            return;
+          }
           if (MOVE.active) {
             setMoveTarget(ci, cell);
             return;
@@ -1217,6 +1236,408 @@ async function openMove(preserve=false){
   openDialog(dlg);
 }
 
+function isDesktopDevice(){
+  const coarse = window.matchMedia ? window.matchMedia('(pointer:coarse)').matches : false;
+  const mobileUa = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+  return !coarse && !mobileUa;
+}
+
+function todayYmd(){
+  const now = new Date();
+  const yy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yy}-${mm}-${dd}`;
+}
+
+function arrayBufferToBase64(buffer){
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+function getNewInboundSelectedItem(){
+  return (NEW_INBOUND.items || []).find(item => item.id === NEW_INBOUND.selectedId) || null;
+}
+
+function updateNewInboundActionButtons(){
+  const dlg = document.getElementById('dlgNewInbound');
+  if (!dlg) return;
+  const selected = getNewInboundSelectedItem();
+  const hasSelectable = Boolean(selected);
+  const displayBtn = dlg.querySelector('#btnNewInboundDisplay');
+  const inboundBtn = dlg.querySelector('#btnNewInboundInbound');
+  if (displayBtn) displayBtn.disabled = !hasSelectable;
+  if (inboundBtn) inboundBtn.disabled = !hasSelectable;
+}
+
+function renderNewInboundTable(){
+  const dlg = document.getElementById('dlgNewInbound');
+  if (!dlg) return;
+  const tbody = dlg.querySelector('#tblNewInbound tbody');
+  const meta = dlg.querySelector('#newInboundSource');
+  if (!tbody || !meta) return;
+
+  tbody.innerHTML = '';
+  const items = NEW_INBOUND.items || [];
+  meta.textContent = items.length
+    ? `${items.length.toLocaleString('ko-KR')}건 · ${dlg.dataset.sourceName || '저장된 리스트'}`
+    : '저장된 리스트가 없습니다.';
+
+  for (const item of items) {
+    const tr = document.createElement('tr');
+    if (item.id === NEW_INBOUND.selectedId) tr.classList.add('sel');
+    tr.innerHTML = `
+      <td>${item.sku_code || '-'}</td>
+      <td>${item.product_name || ''}</td>
+      <td class="r">${Number(item.box_qty || 0).toLocaleString('ko-KR')}</td>
+      <td class="r">${Number(item.inbound_qty || 0).toLocaleString('ko-KR')}</td>
+      <td class="r">${Number(item.pending_qty || 0).toLocaleString('ko-KR')}</td>
+    `;
+    tr.addEventListener('click', ()=>{
+      NEW_INBOUND.selectedId = item.id;
+      renderNewInboundTable();
+      updateNewInboundActionButtons();
+    });
+    tbody.append(tr);
+  }
+
+  if (!items.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="5" class="muted" style="text-align:center;">선택한 날짜에 저장된 신규입고리스트가 없습니다.</td>';
+    tbody.append(tr);
+  }
+
+  updateNewInboundActionButtons();
+}
+
+async function fetchNewInboundList(dateText){
+  const data = await getJSON(`${API_BASE}/new_inbound_list?date=${encodeURIComponent(dateText)}`);
+  NEW_INBOUND.date = data.date || dateText;
+  NEW_INBOUND.items = data.items || [];
+  NEW_INBOUND.selectedId = (NEW_INBOUND.items || []).some(item => item.id === NEW_INBOUND.selectedId)
+    ? NEW_INBOUND.selectedId
+    : ((NEW_INBOUND.items[0] && NEW_INBOUND.items[0].id) || null);
+  const dlg = document.getElementById('dlgNewInbound');
+  if (dlg) dlg.dataset.sourceName = data.source_name || '저장된 리스트';
+  renderNewInboundTable();
+}
+
+async function importNewInboundExcel(file){
+  if (!file) return;
+  if (!/\.xlsx$|\.xlsm$|\.xltx$|\.xltm$/i.test(file.name || '')) {
+    alert('현재는 .xlsx 계열 엑셀 파일만 불러올 수 있습니다.');
+    return;
+  }
+  const dlg = ensureNewInboundDialog();
+  const dateInput = dlg.querySelector('#newInboundDate');
+  const dateText = (dateInput?.value || NEW_INBOUND.date || todayYmd()).trim();
+  try {
+    setDialogPending(dlg, true, '#newInboundImport', '불러오는 중...');
+    const buffer = await file.arrayBuffer();
+    const data = await postJSON(`${API_BASE}/new_inbound_list/import`, {
+      date: dateText,
+      filename: file.name || '',
+      content_base64: arrayBufferToBase64(buffer),
+    });
+    NEW_INBOUND.date = data.date || dateText;
+    NEW_INBOUND.items = data.items || [];
+    NEW_INBOUND.selectedId = (NEW_INBOUND.items[0] && NEW_INBOUND.items[0].id) || null;
+    dlg.dataset.sourceName = data.source_name || file.name || '엑셀 불러오기';
+    if (dateInput) dateInput.value = NEW_INBOUND.date;
+    renderNewInboundTable();
+  } catch (err) {
+    alert('신규입고 엑셀 불러오기 실패: ' + (err.message || err));
+  } finally {
+    setDialogPending(dlg, false, '#newInboundImport');
+    const fileInput = dlg.querySelector('#newInboundFile');
+    if (fileInput) fileInput.value = '';
+  }
+}
+
+function ensureNewInboundDialog(){
+  let dlg = document.getElementById('dlgNewInbound');
+  if (!dlg) {
+    dlg = document.createElement('dialog');
+    dlg.id = 'dlgNewInbound';
+    dlg.innerHTML = `
+      <form method="dialog" class="dialog new-inbound-dialog">
+        <h3>신규입고리스트</h3>
+        <div class="row new-inbound-toolbar">
+          <label class="new-inbound-date-field">날짜 <input id="newInboundDate" type="date" /></label>
+          <button id="newInboundImport" type="button">불러오기</button>
+          <input id="newInboundFile" type="file" accept=".xlsx,.xlsm,.xltx,.xltm" hidden />
+          <div id="newInboundSource" class="muted"></div>
+        </div>
+        <div class="new-inbound-table-wrap">
+          <table id="tblNewInbound">
+            <thead>
+              <tr>
+                <th>skucode</th>
+                <th>상품명</th>
+                <th class="r">박스수량</th>
+                <th class="r">입고수량</th>
+                <th class="r">미처리수량</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="row new-inbound-actions">
+          <button id="btnNewInboundDisplay" type="button">진열</button>
+          <button id="btnNewInboundInbound" type="button">입고</button>
+          <button id="btnNewInboundClose" type="button">닫기</button>
+        </div>
+      </form>`;
+    document.body.append(dlg);
+  }
+
+  if (!dlg.__bound) {
+    dlg.__bound = true;
+    const dateInput = dlg.querySelector('#newInboundDate');
+    const importBtn = dlg.querySelector('#newInboundImport');
+    const closeBtn = dlg.querySelector('#btnNewInboundClose');
+    const displayBtn = dlg.querySelector('#btnNewInboundDisplay');
+    const inboundBtn = dlg.querySelector('#btnNewInboundInbound');
+    const fileInput = dlg.querySelector('#newInboundFile');
+
+    if (dateInput) {
+      dateInput.addEventListener('change', async ()=>{
+        const nextDate = (dateInput.value || '').trim();
+        if (!nextDate) return;
+        try {
+          setDialogPending(dlg, true, '#newInboundImport', '불러오는 중...');
+          await fetchNewInboundList(nextDate);
+        } catch (err) {
+          alert('신규입고리스트 조회 실패: ' + (err.message || err));
+        } finally {
+          setDialogPending(dlg, false, '#newInboundImport');
+        }
+      });
+      dateInput.addEventListener('click', ()=>{
+        if (typeof dateInput.showPicker === 'function') {
+          try { dateInput.showPicker(); } catch (_) {}
+        }
+      });
+    }
+
+    if (importBtn) {
+      importBtn.addEventListener('click', ()=>{
+        if (!isDesktopDevice()) return;
+        fileInput?.click();
+      });
+    }
+
+    fileInput?.addEventListener('change', ()=>{
+      const file = fileInput.files && fileInput.files[0];
+      importNewInboundExcel(file);
+    });
+
+    closeBtn?.addEventListener('click', ()=>{
+      closeDialog(dlg);
+    });
+    displayBtn?.addEventListener('click', ()=>{
+      openNewInboundProcessDialog('display').catch(err=>alert(err.message || err));
+    });
+    inboundBtn?.addEventListener('click', ()=>{
+      openNewInboundProcessDialog('inbound').catch(err=>alert(err.message || err));
+    });
+  }
+
+  const importBtn = dlg.querySelector('#newInboundImport');
+  if (importBtn) {
+    importBtn.disabled = !isDesktopDevice();
+    importBtn.title = isDesktopDevice() ? '엑셀 파일을 불러옵니다.' : 'PC에서만 엑셀 불러오기를 사용할 수 있습니다.';
+  }
+  return dlg;
+}
+
+async function openNewInboundDialog(){
+  const dlg = ensureNewInboundDialog();
+  const dateInput = dlg.querySelector('#newInboundDate');
+  const targetDate = NEW_INBOUND.date || todayYmd();
+  if (dateInput) dateInput.value = targetDate;
+  if (!dlg.open) openDialog(dlg);
+  try {
+    setDialogPending(dlg, true, '#newInboundImport', '불러오는 중...');
+    await fetchNewInboundList(targetDate);
+  } catch (err) {
+    alert('신규입고리스트 조회 실패: ' + (err.message || err));
+  } finally {
+    setDialogPending(dlg, false, '#newInboundImport');
+  }
+}
+
+function ensureNewInboundProcessDialog(){
+  let dlg = document.getElementById('dlgNewInboundProcess');
+  if (!dlg) {
+    dlg = document.createElement('dialog');
+    dlg.id = 'dlgNewInboundProcess';
+    dlg.innerHTML = `
+      <form method="dialog" class="dialog new-inbound-process-dialog">
+        <h3 id="newInboundProcessTitle">처리</h3>
+        <div class="row"><div id="newInboundProcessMeta" class="muted"></div></div>
+        <div class="row">
+          <label>수량 <input id="newInboundProcessQty" type="number" min="1" step="1" value="1" /></label>
+        </div>
+        <div class="row" id="newInboundRackRow" hidden>
+          <div>선택된 렉: <strong id="newInboundRackCode">-</strong></div>
+          <button id="newInboundPickRack" type="button">위치선택</button>
+        </div>
+        <div class="row">
+          <button id="newInboundProcessOk" value="ok">확인</button>
+          <button id="newInboundProcessCancel" type="button">취소</button>
+        </div>
+      </form>`;
+    document.body.append(dlg);
+  }
+  return dlg;
+}
+
+function setNewInboundTarget(ci, cellEl){
+  document.querySelectorAll('.cell.target').forEach(el=>el.classList.remove('target'));
+  NEW_INBOUND.targetRackCode = ci.code;
+  NEW_INBOUND.picking = false;
+  if (cellEl) cellEl.classList.add('target');
+  if (NEW_INBOUND.reopenAfterPick) {
+    NEW_INBOUND.reopenAfterPick = false;
+    openNewInboundProcessDialog('inbound', true).catch(err=>alert(err.message || err));
+  }
+}
+
+async function openNewInboundProcessDialog(mode, preserveDraft=false){
+  const item = getNewInboundSelectedItem();
+  if (!item) {
+    alert('처리할 항목을 먼저 선택하세요.');
+    return;
+  }
+  if (!(Number(item.pending_qty || 0) > 0)) {
+    alert('미처리수량이 0인 항목은 처리할 수 없습니다.');
+    return;
+  }
+
+  NEW_INBOUND.actionMode = mode;
+  NEW_INBOUND.picking = false;
+
+  const listDlg = ensureNewInboundDialog();
+  if (listDlg.open) closeDialog(listDlg);
+
+  const dlg = ensureNewInboundProcessDialog();
+  const titleEl = dlg.querySelector('#newInboundProcessTitle');
+  const metaEl = dlg.querySelector('#newInboundProcessMeta');
+  const qtyEl = dlg.querySelector('#newInboundProcessQty');
+  const rackRow = dlg.querySelector('#newInboundRackRow');
+  const rackCodeEl = dlg.querySelector('#newInboundRackCode');
+  const pickBtn = dlg.querySelector('#newInboundPickRack');
+  const cancelBtn = dlg.querySelector('#newInboundProcessCancel');
+  const okBtn = dlg.querySelector('#newInboundProcessOk');
+
+  if (titleEl) titleEl.textContent = mode === 'display' ? '진열' : '입고';
+  if (metaEl) {
+    metaEl.style.whiteSpace = 'pre-line';
+    metaEl.textContent =
+      `상품코드: ${item.sku_code || '-'}\n` +
+      `상품명: ${item.product_name || '-'}\n` +
+      `수량: ${Number(item.pending_qty || 0).toLocaleString('ko-KR')}`;
+  }
+  if (qtyEl) {
+    qtyEl.min = '1';
+    qtyEl.max = String(Math.max(1, Number(item.pending_qty || 0)));
+    qtyEl.value = preserveDraft && NEW_INBOUND.draftQty
+      ? String(NEW_INBOUND.draftQty)
+      : String(Math.max(1, Number(item.pending_qty || 0)));
+  }
+
+  const inboundMode = mode === 'inbound';
+  if (rackRow) rackRow.hidden = !inboundMode;
+  if (rackCodeEl) rackCodeEl.textContent = NEW_INBOUND.targetRackCode || '-';
+
+  if (pickBtn) {
+    pickBtn.onclick = (e)=>{
+      e.preventDefault();
+      NEW_INBOUND.draftQty = qtyEl?.value || '';
+      NEW_INBOUND.picking = true;
+      NEW_INBOUND.reopenAfterPick = true;
+      closeDialog(dlg);
+      alert('현황판에서 입고할 렉을 선택하세요.');
+    };
+  }
+
+  if (cancelBtn) {
+    cancelBtn.onclick = (e)=>{
+      e.preventDefault();
+      NEW_INBOUND.picking = false;
+      NEW_INBOUND.reopenAfterPick = false;
+      NEW_INBOUND.actionMode = '';
+      NEW_INBOUND.draftQty = '';
+      closeDialog(dlg);
+      openNewInboundDialog().catch(err=>alert(err.message || err));
+    };
+  }
+
+  if (okBtn) {
+    okBtn.onclick = async (e)=>{
+      e.preventDefault();
+      if (isDialogPending(dlg)) return;
+      let qty = parseInt((qtyEl?.value || '0').trim(), 10);
+      if (!Number.isFinite(qty) || qty <= 0) qty = 1;
+      if (qty > Number(item.pending_qty || 0)) qty = Number(item.pending_qty || 0);
+      if (inboundMode && !NEW_INBOUND.targetRackCode) {
+        alert('입고할 렉을 먼저 선택하세요.');
+        return;
+      }
+      try {
+        setDialogPending(dlg, true, '#newInboundProcessOk');
+        const data = await postJSON(`${API_BASE}/new_inbound_list/process`, {
+          date: NEW_INBOUND.date,
+          entry_id: item.id,
+          action: mode,
+          qty,
+          rack_code: inboundMode ? NEW_INBOUND.targetRackCode : '',
+        });
+
+        NEW_INBOUND.items = data.list?.items || [];
+        NEW_INBOUND.selectedId = (NEW_INBOUND.items || []).some(entry => entry.id === item.id)
+          ? item.id
+          : ((NEW_INBOUND.items[0] && NEW_INBOUND.items[0].id) || null);
+        NEW_INBOUND.actionMode = '';
+        NEW_INBOUND.draftQty = '';
+        renderNewInboundTable();
+        closeDialog(dlg);
+
+        if (inboundMode && data.row) {
+          const rowSelect = document.querySelector('#rowSelect');
+          if (rowSelect && rowSelect.value !== data.row) {
+            rowSelect.value = data.row;
+          }
+          await loadCells();
+          const targetCell = CELLS.find(ci => ci.code === NEW_INBOUND.targetRackCode);
+          if (targetCell) {
+            CURRENT_CELL = targetCell;
+            renderRack();
+            showDetail(targetCell);
+          } else {
+            renderRack();
+          }
+        }
+
+        await openNewInboundDialog();
+      } catch (err) {
+        alert((mode === 'display' ? '진열' : '입고') + ' 처리 실패: ' + (err.message || err));
+      } finally {
+        setDialogPending(dlg, false, '#newInboundProcessOk');
+      }
+    };
+  }
+
+  openDialog(dlg);
+}
+
 /* ---------- results list below rack ---------- */
 function clearResults(){
   const sec = document.querySelector('#searchResults');
@@ -1417,6 +1838,7 @@ function ensureFooterActions(){
   bar.className = 'footer-actions';
   bar.innerHTML = `
     <button id="btnFooterSearch" class="btn">재고검색</button>
+    <button id="btnFooterNewInbound" class="btn">신규입고</button>
     <button id="btnFooterGoLocation" class="btn">로케이션코드입력</button>
   `;
   document.body.append(bar);
@@ -1510,6 +1932,10 @@ async function init() {
   document.getElementById('btnFooterSearch')?.addEventListener('click', () => {
     // 변경: 검색 전용 다이얼로그 오픈 (상품명 | 수량 표시)
     openSearchDialog().catch(err => alert('검색창 오류: ' + (err.message || err)));
+  });
+
+  document.getElementById('btnFooterNewInbound')?.addEventListener('click', () => {
+    openNewInboundDialog().catch(err => alert('신규입고리스트 오류: ' + (err.message || err)));
   });
 
   // [로케이션코드입력] -> 코드 입력 받아 해당 위치로 점프
