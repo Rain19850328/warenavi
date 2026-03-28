@@ -489,7 +489,7 @@ dialog button#movePick{
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  table-layout: fixed;
+  table-layout: auto;
 }
 #tblNewInbound thead th{
   position: sticky;
@@ -507,7 +507,7 @@ dialog button#movePick{
 }
 #tblNewInbound th:first-child,
 #tblNewInbound td:first-child{
-  width: auto;
+  width: 100%;
 }
 #tblNewInbound th:nth-child(2),
 #tblNewInbound td:nth-child(2),
@@ -515,7 +515,8 @@ dialog button#movePick{
 #tblNewInbound td:nth-child(3),
 #tblNewInbound th:nth-child(4),
 #tblNewInbound td:nth-child(4){
-  width: 92px;
+  width: 1%;
+  white-space: nowrap;
 }
 #tblNewInbound td:first-child{
   white-space: normal;
@@ -577,6 +578,22 @@ dialog button#movePick{
     padding: 9px 12px;
   }
   .auth-form button{ width: 100%; }
+  .new-inbound-table-wrap{
+    padding: 0 12px 12px 12px;
+  }
+  #tblNewInbound{
+    font-size: 12px;
+  }
+  #tblNewInbound thead th,
+  #tblNewInbound td{
+    padding: 7px 6px;
+  }
+  .new-inbound-item-sku{
+    font-size: 10px;
+  }
+  .new-inbound-item-name{
+    font-size: 13px;
+  }
   .new-inbound-actions{
     flex-wrap: wrap;
   }
