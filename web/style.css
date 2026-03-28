@@ -489,6 +489,7 @@ dialog button#movePick{
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  table-layout: fixed;
 }
 #tblNewInbound thead th{
   position: sticky;
@@ -504,6 +505,21 @@ dialog button#movePick{
   padding: 8px 10px;
   border-bottom: 1px solid #e2e8f0;
 }
+#tblNewInbound th:first-child,
+#tblNewInbound td:first-child{
+  width: auto;
+}
+#tblNewInbound th:nth-child(2),
+#tblNewInbound td:nth-child(2),
+#tblNewInbound th:nth-child(3),
+#tblNewInbound td:nth-child(3),
+#tblNewInbound th:nth-child(4),
+#tblNewInbound td:nth-child(4){
+  width: 92px;
+}
+#tblNewInbound td:first-child{
+  white-space: normal;
+}
 #tblNewInbound tbody tr{
   cursor: pointer;
 }
@@ -512,6 +528,28 @@ dialog button#movePick{
 }
 #tblNewInbound tbody tr.sel{
   background: #e0f2fe;
+}
+#tblNewInbound tbody tr.is-complete td{
+  color: #94a3b8;
+}
+#tblNewInbound tbody tr.is-complete .new-inbound-item-name{
+  color: #94a3b8;
+}
+#tblNewInbound tbody tr.is-complete .new-inbound-item-sku{
+  color: #cbd5e1;
+}
+.new-inbound-item-sku{
+  margin-bottom: 2px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #94a3b8;
+  word-break: break-all;
+}
+.new-inbound-item-name{
+  font-size: 14px;
+  line-height: 1.35;
+  color: #0f172a;
+  word-break: break-word;
 }
 .new-inbound-actions{
   display: flex !important;

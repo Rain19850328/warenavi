@@ -1364,10 +1364,13 @@ function renderNewInboundTable(){
 
   for (const item of items) {
     const tr = document.createElement('tr');
+    if (Number(item.pending_qty || 0) <= 0) tr.classList.add('is-complete');
     if (item.id === NEW_INBOUND.selectedId) tr.classList.add('sel');
     tr.innerHTML = `
-      <td>${item.sku_code || '-'}</td>
-      <td>${item.product_name || ''}</td>
+      <td>
+        <div class="new-inbound-item-sku">${item.sku_code || '-'}</div>
+        <div class="new-inbound-item-name">${item.product_name || ''}</div>
+      </td>
       <td class="r">${Number(item.box_qty || 0).toLocaleString('ko-KR')}</td>
       <td class="r">${Number(item.inbound_qty || 0).toLocaleString('ko-KR')}</td>
       <td class="r">${Number(item.pending_qty || 0).toLocaleString('ko-KR')}</td>
@@ -1382,7 +1385,7 @@ function renderNewInboundTable(){
 
   if (!items.length) {
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="5" class="muted" style="text-align:center;">선택한 날짜에 저장된 신규입고리스트가 없습니다.</td>';
+    tr.innerHTML = '<td colspan="4" class="muted" style="text-align:center;">선택한 날짜에 저장된 신규입고리스트가 없습니다.</td>';
     tbody.append(tr);
   }
 
@@ -1483,11 +1486,10 @@ function ensureNewInboundDialog(){
           <table id="tblNewInbound">
             <thead>
               <tr>
-                <th>skucode</th>
                 <th>상품명</th>
-                <th class="r">박스수량</th>
-                <th class="r">입고수량</th>
-                <th class="r">미처리수량</th>
+                <th class="r">박스</th>
+                <th class="r">입고</th>
+                <th class="r">미처리</th>
               </tr>
             </thead>
             <tbody></tbody>
