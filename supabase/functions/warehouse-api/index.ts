@@ -58,6 +58,25 @@ function normalizeHeader(value: unknown) {
   return String(value ?? "").replace(/\s+/g, "").trim().toLowerCase();
 }
 
+function findInboundHeaderIndex(headerRow: unknown[], candidates: string[], excludes: string[] = []) {
+  const normalized = headerRow.map((value) => normalizeHeader(value));
+  const deny = excludes.map((value) => normalizeHeader(value));
+
+  for (const candidate of candidates.map((value) => normalizeHeader(value))) {
+    const exactIndex = normalized.findIndex((value) => value === candidate);
+    if (exactIndex >= 0) return exactIndex;
+  }
+
+  for (const candidate of candidates.map((value) => normalizeHeader(value))) {
+    const fuzzyIndex = normalized.findIndex((value) =>
+      value.includes(candidate) && !deny.some((blocked) => blocked && value.includes(blocked))
+    );
+    if (fuzzyIndex >= 0) return fuzzyIndex;
+  }
+
+  return -1;
+}
+
 function toInt(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return Math.round(value);
   const parsed = Number.parseFloat(String(value ?? "").replace(/,/g, "").trim());
@@ -135,9 +154,9 @@ async function parseNewInboundWorkbook(contentBase64: string): Promise<ParsedInb
   });
 
   const headerRow = rows[1] || [];
-  const productIndex = headerRow.findIndex((value) => normalizeHeader(value).includes("품명"));
-  const inboundIndex = headerRow.findIndex((value) => normalizeHeader(value).includes("상세수량"));
-  const boxIndex = headerRow.findIndex((value) => normalizeHeader(value).includes("박스수"));
+  const productIndex = findInboundHeaderIndex(headerRow, ["품명"], ["영어품명"]);
+  const inboundIndex = findInboundHeaderIndex(headerRow, ["상세수량"]);
+  const boxIndex = findInboundHeaderIndex(headerRow, ["박스수"]);
 
   if (productIndex < 0 || inboundIndex < 0 || boxIndex < 0) {
     throw new Error("엑셀 2행에서 품명, 상세수량, 박스수 컬럼을 찾을 수 없습니다.");

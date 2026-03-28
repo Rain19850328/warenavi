@@ -1265,6 +1265,22 @@ function normalizeExcelHeader(value){
   return String(value ?? '').replace(/\s+/g, '').trim().toLowerCase();
 }
 
+function findInboundHeaderIndex(headerRow, candidates, excludes = []){
+  const normalized = headerRow.map((value)=> normalizeExcelHeader(value));
+  const deny = excludes.map((value)=> normalizeExcelHeader(value));
+  for (const candidate of candidates.map((value)=> normalizeExcelHeader(value))) {
+    const exactIndex = normalized.findIndex((value)=> value === candidate);
+    if (exactIndex >= 0) return exactIndex;
+  }
+  for (const candidate of candidates.map((value)=> normalizeExcelHeader(value))) {
+    const fuzzyIndex = normalized.findIndex((value)=>
+      value.includes(candidate) && !deny.some((blocked)=> blocked && value.includes(blocked))
+    );
+    if (fuzzyIndex >= 0) return fuzzyIndex;
+  }
+  return -1;
+}
+
 function toExcelNumber(value){
   if (typeof value === 'number' && Number.isFinite(value)) return Math.round(value);
   const parsed = Number.parseFloat(String(value ?? '').replace(/,/g, '').trim());
@@ -1289,9 +1305,9 @@ async function extractInboundRowsFromExcel(file){
       blankrows: false,
     });
     const headerRow = matrix[1] || [];
-    const productIndex = headerRow.findIndex((value)=> normalizeExcelHeader(value).includes('품명'));
-    const detailIndex = headerRow.findIndex((value)=> normalizeExcelHeader(value).includes('상세수량'));
-    const boxIndex = headerRow.findIndex((value)=> normalizeExcelHeader(value).includes('박스수'));
+    const productIndex = findInboundHeaderIndex(headerRow, ['품명'], ['영어품명']);
+    const detailIndex = findInboundHeaderIndex(headerRow, ['상세수량']);
+    const boxIndex = findInboundHeaderIndex(headerRow, ['박스수']);
     if (productIndex < 0 || detailIndex < 0 || boxIndex < 0) continue;
 
     for (const row of matrix.slice(2)) {

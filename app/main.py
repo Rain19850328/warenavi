@@ -879,6 +879,22 @@ def _parse_inbound_date(date_text: str) -> str:
 def _normalize_header(value) -> str:
   return re.sub(r"\s+", "", str(value or "")).strip().lower()
 
+def _find_inbound_header_index(headers: Dict[int, str], candidates: List[str], excludes: Optional[List[str]] = None) -> Optional[int]:
+  excludes = excludes or []
+  deny = [_normalize_header(value) for value in excludes]
+  normalized_candidates = [_normalize_header(value) for value in candidates]
+
+  for candidate in normalized_candidates:
+    for idx, title in headers.items():
+      if title == candidate:
+        return idx
+
+  for candidate in normalized_candidates:
+    for idx, title in headers.items():
+      if candidate in title and not any(blocked and blocked in title for blocked in deny):
+        return idx
+  return None
+
 def _to_number(value) -> int:
   if value is None:
     return 0
@@ -943,9 +959,9 @@ def _parse_new_inbound_workbook(content_bytes: bytes) -> List[dict]:
     for idx in range(1, sheet.max_column + 1)
   }
 
-  product_col = next((idx for idx, title in headers.items() if "품명" in title), None)
-  detail_qty_col = next((idx for idx, title in headers.items() if "상세수량" in title), None)
-  box_qty_col = next((idx for idx, title in headers.items() if "박스수" in title), None)
+  product_col = _find_inbound_header_index(headers, ["품명"], ["영어품명"])
+  detail_qty_col = _find_inbound_header_index(headers, ["상세수량"])
+  box_qty_col = _find_inbound_header_index(headers, ["박스수"])
 
   if not product_col or not detail_qty_col or not box_qty_col:
     raise RuntimeError("엑셀 2행에서 품명, 상세수량, 박스수 컬럼을 찾을 수 없습니다.")

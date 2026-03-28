@@ -516,6 +516,13 @@ dialog button#movePick{
 .new-inbound-actions{
   display: flex !important;
   justify-content: flex-end;
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  margin-top: 0;
+  border-top: 1px solid #e2e8f0;
+  background: rgba(255,255,255,.96);
+  backdrop-filter: blur(6px);
 }
 .new-inbound-actions button{
   min-width: 88px;
