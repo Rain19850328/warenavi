@@ -169,6 +169,36 @@ async function parseNewInboundWorkbook(contentBase64: string): Promise<ParsedInb
   return parsed;
 }
 
+async function normalizeNewInboundRows(rows: unknown[]): Promise<ParsedInboundItem[]> {
+  const parsed = (rows || [])
+    .map((row) => {
+      const source = row && typeof row === "object" ? row as Record<string, unknown> : {};
+      const productName = String(source.product_name ?? "").trim();
+      if (!productName) return null;
+      const inboundQty = toInt(source.inbound_qty);
+      const pendingQty = source.pending_qty == null ? inboundQty : toInt(source.pending_qty);
+      return {
+        id: String(source.id ?? crypto.randomUUID()),
+        sku_code: String(source.sku_code ?? "").trim(),
+        product_name: productName,
+        box_qty: toInt(source.box_qty),
+        inbound_qty: inboundQty,
+        pending_qty: pendingQty,
+      } satisfies ParsedInboundItem;
+    })
+    .filter((row): row is ParsedInboundItem => Boolean(row));
+
+  const needLookup = parsed.filter((row) => !row.sku_code).map((row) => row.product_name);
+  const skuMap = needLookup.length ? await lookupSkuCodesByName(needLookup) : new Map<string, string>();
+  for (const row of parsed) {
+    if (!row.sku_code) {
+      row.sku_code = skuMap.get(row.product_name) || "";
+    }
+  }
+
+  return parsed;
+}
+
 async function getAuthContext(req: Request): Promise<AuthContext> {
   const header = req.headers.get("authorization") || "";
   const match = header.match(/^Bearer\s+(.+)$/i);
@@ -275,7 +305,9 @@ Deno.serve(async (req) => {
       const payload = await req.json();
       const date = String(payload.date || "").trim();
       if (!date) throw new Error("date is required");
-      const items = await parseNewInboundWorkbook(String(payload.content_base64 || ""));
+      const items = Array.isArray(payload.rows)
+        ? await normalizeNewInboundRows(payload.rows)
+        : await parseNewInboundWorkbook(String(payload.content_base64 || ""));
       const { data, error } = await supabase.rpc("warehouse_replace_new_inbound_list", {
         p_date: date,
         p_source_name: String(payload.filename || ""),

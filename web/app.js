@@ -1261,6 +1261,61 @@ function arrayBufferToBase64(buffer){
   return btoa(binary);
 }
 
+function normalizeExcelHeader(value){
+  return String(value ?? '').replace(/\s+/g, '').trim().toLowerCase();
+}
+
+function toExcelNumber(value){
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.round(value);
+  const parsed = Number.parseFloat(String(value ?? '').replace(/,/g, '').trim());
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(parsed);
+}
+
+async function extractInboundRowsFromExcel(file){
+  if (!window.XLSX) {
+    throw new Error('엑셀 파서 라이브러리를 불러오지 못했습니다. 잠시 후 다시 시도하세요.');
+  }
+  const buffer = await file.arrayBuffer();
+  const workbook = window.XLSX.read(buffer, { type: 'array' });
+  const rows = [];
+
+  for (const sheetName of workbook.SheetNames || []) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+    const matrix = window.XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: false,
+      blankrows: false,
+    });
+    const headerRow = matrix[1] || [];
+    const productIndex = headerRow.findIndex((value)=> normalizeExcelHeader(value).includes('품명'));
+    const detailIndex = headerRow.findIndex((value)=> normalizeExcelHeader(value).includes('상세수량'));
+    const boxIndex = headerRow.findIndex((value)=> normalizeExcelHeader(value).includes('박스수'));
+    if (productIndex < 0 || detailIndex < 0 || boxIndex < 0) continue;
+
+    for (const row of matrix.slice(2)) {
+      const productName = String(row?.[productIndex] ?? '').trim();
+      const inboundQty = toExcelNumber(row?.[detailIndex]);
+      const boxQty = toExcelNumber(row?.[boxIndex]);
+      if (!productName && !inboundQty && !boxQty) continue;
+      if (!productName) continue;
+      rows.push({
+        product_name: productName,
+        inbound_qty: inboundQty,
+        pending_qty: inboundQty,
+        box_qty: boxQty,
+        source_sheet: sheetName,
+      });
+    }
+  }
+
+  if (!rows.length) {
+    throw new Error('엑셀에서 품명, 상세수량, 박스수 데이터를 찾지 못했습니다.');
+  }
+  return rows;
+}
+
 function getNewInboundSelectedItem(){
   return (NEW_INBOUND.items || []).find(item => item.id === NEW_INBOUND.selectedId) || null;
 }
@@ -1339,11 +1394,11 @@ async function importNewInboundExcel(file){
   const dateText = (dateInput?.value || NEW_INBOUND.date || todayYmd()).trim();
   try {
     setDialogPending(dlg, true, '#newInboundImport', '불러오는 중...');
-    const buffer = await file.arrayBuffer();
+    const rows = await extractInboundRowsFromExcel(file);
     const data = await postJSON(`${API_BASE}/new_inbound_list/import`, {
       date: dateText,
       filename: file.name || '',
-      content_base64: arrayBufferToBase64(buffer),
+      rows,
     });
     NEW_INBOUND.date = data.date || dateText;
     NEW_INBOUND.items = data.items || [];

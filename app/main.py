@@ -977,6 +977,36 @@ def _parse_new_inbound_workbook(content_bytes: bytes) -> List[dict]:
     row_item["sku_code"] = code_map.get(row_item["product_name"], "")
   return rows
 
+def _normalize_new_inbound_rows(rows: List[dict]) -> List[dict]:
+  normalized: List[dict] = []
+  names: List[str] = []
+  for source in rows or []:
+    product_name = str((source or {}).get("product_name") or "").strip()
+    if not product_name:
+      continue
+    inbound_qty = _to_number((source or {}).get("inbound_qty"))
+    pending_qty = _to_number((source or {}).get("pending_qty"))
+    if pending_qty <= 0 and inbound_qty > 0:
+      pending_qty = inbound_qty
+    row_item = {
+      "id": str((source or {}).get("id") or uuid.uuid4()),
+      "sku_code": str((source or {}).get("sku_code") or "").strip(),
+      "product_name": product_name,
+      "box_qty": _to_number((source or {}).get("box_qty")),
+      "inbound_qty": inbound_qty,
+      "pending_qty": pending_qty,
+      "logs": [],
+    }
+    normalized.append(row_item)
+    if not row_item["sku_code"]:
+      names.append(product_name)
+
+  code_map = _lookup_item_codes_by_name(names)
+  for row_item in normalized:
+    if not row_item["sku_code"]:
+      row_item["sku_code"] = code_map.get(row_item["product_name"], "")
+  return normalized
+
 
 # ---------- Pydantic Models for API ----------
 class CellItemModel(BaseModel):
@@ -1052,7 +1082,8 @@ class SearchResultsResponse(BaseModel):
 class NewInboundImportRequest(BaseModel):
   date: str
   filename: str = ""
-  content_base64: str
+  content_base64: str = ""
+  rows: List[dict] = []
 
 class NewInboundProcessRequest(BaseModel):
   date: str
@@ -1173,8 +1204,11 @@ def get_new_inbound_list(date: str):
 def post_new_inbound_list_import(req: NewInboundImportRequest):
   try:
     date_text = _parse_inbound_date(req.date)
-    content_bytes = base64.b64decode(req.content_base64)
-    items = _parse_new_inbound_workbook(content_bytes)
+    if req.rows:
+      items = _normalize_new_inbound_rows(req.rows)
+    else:
+      content_bytes = base64.b64decode(req.content_base64)
+      items = _parse_new_inbound_workbook(content_bytes)
     return new_inbound_store.replace_day(date_text, items, source_name=req.filename)
   except Exception as e:
     raise HTTPException(400, detail=str(e))
