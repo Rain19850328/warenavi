@@ -1637,6 +1637,11 @@ async function openNewInboundProcessDialog(mode, preserveDraft=false){
 
   NEW_INBOUND.actionMode = mode;
   NEW_INBOUND.picking = false;
+  if (mode !== 'inbound') {
+    NEW_INBOUND.targetRackCode = '';
+    NEW_INBOUND.reopenAfterPick = false;
+    document.querySelectorAll('.cell.target').forEach(el=>el.classList.remove('target'));
+  }
 
   const listDlg = ensureNewInboundDialog();
   if (listDlg.open) closeDialog(listDlg);
@@ -1668,12 +1673,17 @@ async function openNewInboundProcessDialog(mode, preserveDraft=false){
   }
 
   const inboundMode = mode === 'inbound';
-  if (rackRow) rackRow.hidden = !inboundMode;
-  if (rackCodeEl) rackCodeEl.textContent = NEW_INBOUND.targetRackCode || '-';
+  if (rackRow) {
+    rackRow.hidden = !inboundMode;
+    rackRow.style.display = inboundMode ? 'flex' : 'none';
+  }
+  if (rackCodeEl) rackCodeEl.textContent = inboundMode ? (NEW_INBOUND.targetRackCode || '-') : '-';
+  if (pickBtn) pickBtn.disabled = !inboundMode;
 
   if (pickBtn) {
     pickBtn.onclick = (e)=>{
       e.preventDefault();
+      if (!inboundMode) return;
       NEW_INBOUND.draftQty = qtyEl?.value || '';
       NEW_INBOUND.picking = true;
       NEW_INBOUND.reopenAfterPick = true;
