@@ -115,10 +115,9 @@ async function lookupSkuCodesByName(names: string[]) {
   );
 
   for (const group of chunk(targets, 200)) {
-    const { data, error } = await supabase
-      .from("items")
-      .select("code,name")
-      .in("name", group);
+    const { data, error } = await supabase.rpc("warehouse_lookup_item_codes_by_names", {
+      p_names: group,
+    });
     if (error) throw error;
 
     for (const row of data || []) {
