@@ -59,7 +59,7 @@ function normalizeHeader(value: unknown) {
 }
 
 function findInboundHeaderIndex(headerRow: unknown[], candidates: string[], excludes: string[] = []) {
-  const normalized = headerRow.map((value) => normalizeHeader(value));
+  const normalized = Array.from(headerRow || [], (value) => normalizeHeader(value));
   const deny = excludes.map((value) => normalizeHeader(value));
 
   for (const candidate of candidates.map((value) => normalizeHeader(value))) {
@@ -68,9 +68,10 @@ function findInboundHeaderIndex(headerRow: unknown[], candidates: string[], excl
   }
 
   for (const candidate of candidates.map((value) => normalizeHeader(value))) {
-    const fuzzyIndex = normalized.findIndex((value) =>
-      value.includes(candidate) && !deny.some((blocked) => blocked && value.includes(blocked))
-    );
+    const fuzzyIndex = normalized.findIndex((value) => {
+      const safeValue = String(value || "");
+      return safeValue.includes(candidate) && !deny.some((blocked) => blocked && safeValue.includes(blocked));
+    });
     if (fuzzyIndex >= 0) return fuzzyIndex;
   }
 

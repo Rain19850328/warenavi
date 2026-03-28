@@ -1266,15 +1266,17 @@ function normalizeExcelHeader(value){
 }
 
 function findInboundHeaderIndex(headerRow, candidates, excludes = []){
-  const normalized = headerRow.map((value)=> normalizeExcelHeader(value));
+  const normalized = Array.from(headerRow || [], (value)=> normalizeExcelHeader(value));
   const deny = excludes.map((value)=> normalizeExcelHeader(value));
   for (const candidate of candidates.map((value)=> normalizeExcelHeader(value))) {
     const exactIndex = normalized.findIndex((value)=> value === candidate);
     if (exactIndex >= 0) return exactIndex;
   }
   for (const candidate of candidates.map((value)=> normalizeExcelHeader(value))) {
-    const fuzzyIndex = normalized.findIndex((value)=>
-      value.includes(candidate) && !deny.some((blocked)=> blocked && value.includes(blocked))
+    const fuzzyIndex = normalized.findIndex((value)=>{
+      const safeValue = String(value || '');
+      return safeValue.includes(candidate) && !deny.some((blocked)=> blocked && safeValue.includes(blocked));
+    }
     );
     if (fuzzyIndex >= 0) return fuzzyIndex;
   }
