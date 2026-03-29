@@ -1812,18 +1812,27 @@ async function renderSearchResults(query){
   }
 }
 
-function formatMovementType(type){
+function formatMovementType(value){
+  const item = (value && typeof value === 'object') ? value : null;
+  const type = item ? (item.movement_type || '') : (value || '');
+  if (type === 'inbound' && item?.payload?.source === 'new_inbound') {
+    return '신규입고 입고';
+  }
   switch (type) {
     case 'inbound': return '입고';
     case 'outbound': return '출고';
     case 'move': return '이동';
     case 'set_location': return '위치변경';
+    case 'new_inbound_display': return '신규입고 진열';
     default: return type || '-';
   }
 }
 
 function formatMovementTarget(item){
   if (!item) return '-';
+  if (item.movement_type === 'new_inbound_display') {
+    return item.note || item.payload?.inbound_date || '신규입고리스트';
+  }
   if (item.movement_type === 'move') {
     return `${item.from_rack || '-'} -> ${item.to_rack || '-'}`;
   }
@@ -1865,7 +1874,7 @@ function renderMovements(){
     tr.innerHTML = `
       <td>${formatMovementDate(item.created_at)}</td>
       <td>${userLabel}</td>
-      <td>${formatMovementType(item.movement_type)}</td>
+      <td>${formatMovementType(item)}</td>
       <td>${nameLabel}</td>
       <td class="r">${Number(item.quantity || 0).toLocaleString('ko-KR')}</td>
       <td>${formatMovementTarget(item)}</td>
