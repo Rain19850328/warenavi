@@ -352,6 +352,11 @@ dialog .row.search-row input[type="text"]{
   flex: 1 1 auto;
   min-width: 0;
 }
+dialog .row.search-row button:not(.icon-btn){
+  flex: 0 0 auto;
+  min-width: 58px;
+  white-space: nowrap;
+}
 
 dialog input[type="text"],
 dialog input[type="number"]{
@@ -594,6 +599,13 @@ dialog button#movePick{
     padding: 9px 12px;
   }
   .auth-form button{ width: 100%; }
+  dialog .row.search-row{
+    gap: 8px;
+  }
+  dialog .row.search-row button:not(.icon-btn){
+    min-width: 60px;
+    padding: 0 10px;
+  }
   .new-inbound-table-wrap{
     padding: 0 12px 12px 12px;
   }
