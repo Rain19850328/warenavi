@@ -4,6 +4,7 @@ const sel = s => document.querySelector(s);
 const fmtM3 = cm3 => (cm3/1_000_000).toFixed(2) + ' m³';
 
 const CELL_BASE_HEIGHT = 140;
+const REFRESH_ICON_SVG = '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16.2 6.5A7 7 0 1 0 17 10h-1.8a5.2 5.2 0 1 1-1.2-3.3l-2.1 2.1H18V2.9z" fill="currentColor"></path></svg>';
 
 let CONFIG = null;
 let CELLS = [];
@@ -51,9 +52,10 @@ function ensureInboundDialog() {
     dlg.innerHTML = `
       <form method="dialog" class="dialog">
         <h3 id="dlgTitle">입고</h3>
-        <div class="row">
+        <div class="row search-row">
           <input id="dlgQuery" type="text" placeholder="SKU/상품명/위치코드" />
-          <button id="dlgBtnSearch">검색</button>
+          <button id="dlgBtnSearch" type="button">검색</button>
+          <button id="dlgBtnReset" type="button" class="icon-btn" aria-label="검색 초기화" title="검색 초기화">${REFRESH_ICON_SVG}</button>
         </div>
         <div class="list" id="dlgList"></div>
         <div class="row">
@@ -156,9 +158,10 @@ function ensureSearchDialog() {
     dlg.innerHTML = `
       <form method="dialog" class="dialog">
         <h3 id="searchDlgTitle">검색</h3>
-        <div class="row">
+        <div class="row search-row">
           <input id="searchDlgQuery" type="text" placeholder="SKU/상품명 검색" />
           <button id="searchDlgBtn" type="button">검색</button>
+          <button id="searchDlgReset" type="button" class="icon-btn" aria-label="검색 초기화" title="검색 초기화">${REFRESH_ICON_SVG}</button>
         </div>
         <div class="list" id="searchDlgList"></div>
         <div class="row">
@@ -215,6 +218,7 @@ function ensureSearchDialog() {
   // 이벤트 바인딩 (중복 바인딩 방지로 once)
   const qbox = dlg.querySelector('#searchDlgQuery');
   const btn  = dlg.querySelector('#searchDlgBtn');
+  const btnReset = dlg.querySelector('#searchDlgReset');
   const btnClose = dlg.querySelector('#searchDlgClose');
 
   /* ====== ⬇⬇⬇ 자동완성(입고 다이얼로그와 동일 패턴) 추가 시작 ⬇⬇⬇ ====== */
@@ -314,6 +318,16 @@ function ensureSearchDialog() {
     btn.__bound = true;
     btn.addEventListener('click', (e)=>{ e.preventDefault(); doSearch(); });
   }
+  if (btnReset && !btnReset.__bound) {
+    btnReset.__bound = true;
+    btnReset.addEventListener('click', async (e)=>{
+      e.preventDefault();
+      if (qbox) qbox.value = '';
+      sdHideSuggest();
+      await doSearch();
+      qbox?.focus();
+    });
+  }
   if (btnClose && !btnClose.__bound) {
     btnClose.__bound = true;
     btnClose.addEventListener('click', (e)=>{ e.preventDefault(); closeDialog(dlg); });
@@ -381,9 +395,10 @@ function ensureLocationDialog(){
 
         <!-- ① 검색섹션 -->
         <section id="locSearchSec">
-          <div class="row">
+          <div class="row search-row">
             <input id="locDlgQuery" type="text" placeholder="SKU/상품명 검색" />
             <button id="locDlgBtnSearch" type="button">검색</button>
+            <button id="locDlgBtnReset" type="button" class="icon-btn" aria-label="검색 초기화" title="검색 초기화">${REFRESH_ICON_SVG}</button>
           </div>
         </section>
 
@@ -563,6 +578,7 @@ function ensureLocationDialog(){
 
   /* ===== 버튼 바인딩 ===== */
   const btnSearch = dlg.querySelector('#locDlgBtnSearch');
+  const btnReset  = dlg.querySelector('#locDlgBtnReset');
   const btnClose  = dlg.querySelector('#locDlgClose');
   const btnOk     = dlg.querySelector('#locDlgConfirm');
   const newCodeEl = dlg.querySelector('#locDlgNewCode');
@@ -570,6 +586,18 @@ function ensureLocationDialog(){
   if (btnSearch && !btnSearch.__bound){
     btnSearch.__bound = true;
     btnSearch.addEventListener('click', e=>{ e.preventDefault(); doSearch(); });
+  }
+  if (btnReset && !btnReset.__bound){
+    btnReset.__bound = true;
+    btnReset.addEventListener('click', async e=>{
+      e.preventDefault();
+      if (qbox) qbox.value = '';
+      lsHide();
+      setSelected(null);
+      if (newCodeEl) newCodeEl.value = '';
+      await doSearch();
+      qbox?.focus();
+    });
   }
   if (btnClose && !btnClose.__bound){
     btnClose.__bound = true;
@@ -1007,6 +1035,7 @@ async function openInbound() {
   const list = dlg.querySelector('#dlgList');
   const qbox = dlg.querySelector('#dlgQuery');
   const qtyEl = dlg.querySelector('#dlgQty');
+  const resetBtn = dlg.querySelector('#dlgBtnReset');
   if (!titleEl || !list || !qbox || !qtyEl) { alert('입고창 구성요소 오류'); return; }
   titleEl.textContent = `입고(${CURRENT_CELL.code})`;
   list.innerHTML = '';
@@ -1037,6 +1066,20 @@ async function openInbound() {
   }
 
   dlg.querySelector('#dlgBtnSearch').onclick = (e)=>{ e.preventDefault(); search(); };
+  if (resetBtn) {
+    resetBtn.onclick = async (e)=>{
+      e.preventDefault();
+      qbox.value = '';
+      dlg.querySelectorAll('#dlgList .item.sel').forEach(x=>x.classList.remove('sel'));
+      const suggestBox = dlg.querySelector('#dlgSuggest');
+      if (suggestBox) {
+        suggestBox.hidden = true;
+        suggestBox.innerHTML = '';
+      }
+      await search();
+      qbox.focus();
+    };
+  }
   dlg.querySelector('#dlgCancel').onclick = (e)=>{ e.preventDefault(); closeDialog(dlg); };
   dlg.querySelector('#dlgOk').onclick = async (e)=>{
     e.preventDefault();

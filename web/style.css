@@ -348,6 +348,10 @@ dialog .row{
   padding: 12px 16px;
 }
 dialog .row + .row{ border-top: 1px solid #f1f5f9; }
+dialog .row.search-row input[type="text"]{
+  flex: 1 1 auto;
+  min-width: 0;
+}
 
 dialog input[type="text"],
 dialog input[type="number"]{
@@ -391,6 +395,18 @@ dialog button{
   border-radius: 10px; border: 1px solid #e2e8f0;
   background: #f8fafc; font-weight: 600; color: #0f172a;
   cursor: pointer; transition: filter .15s ease, transform .05s ease;
+}
+dialog button.icon-btn{
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+dialog button.icon-btn svg{
+  width: 16px;
+  height: 16px;
 }
 dialog button:hover{ filter: brightness(.98); }
 dialog button:active{ transform: translateY(1px); }
