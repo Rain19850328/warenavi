@@ -372,6 +372,8 @@ Deno.serve(async (req) => {
         p_actor_user_id: auth.userId,
         p_actor_email: auth.email,
         p_actor_name: auth.name,
+        p_note: "",
+        p_payload: {},
       });
       if (error) throw error;
       return json(req, data);
