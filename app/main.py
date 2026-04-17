@@ -934,7 +934,7 @@ def _lookup_item_codes_by_name(names: List[str]) -> Dict[str, str]:
   unique_names = sorted({(name or "").strip() for name in names if (name or "").strip()})
   if not unique_names:
     return {}
-  sql = text("SELECT code, name FROM items WHERE name IN :names ORDER BY code ASC")
+  sql = text("SELECT code, TRIM(name) FROM items WHERE TRIM(name) IN :names ORDER BY code ASC")
   sql = sql.bindparams(bindparam("names", expanding=True))
   mapping: Dict[str, str] = {}
   for engine in _get_lookup_engines():
