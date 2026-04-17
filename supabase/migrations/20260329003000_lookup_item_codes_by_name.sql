@@ -10,6 +10,6 @@ as $$
   )
   select i.name, i.code
   from public.items i
-  join names_ n on n.item_name = i.name
+  join names_ n on n.item_name = trim(i.name)
   order by i.code asc, i.name asc
 $$;
