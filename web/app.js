@@ -694,6 +694,21 @@ async function openLocationDialog(){
 
 
 /* ---------- fetch ---------- */
+const AUTH_FAIL_RE = /Invalid or expired session|Authentication is required|Invalid authenticated user/i;
+
+function isAuthFailure(status, text) {
+  if (status === 401 || status === 403) return true;
+  return AUTH_FAIL_RE.test(String(text || ''));
+}
+
+// 인증 실패는 alert 대신 로그인 화면으로 유도한다.
+function authRequiredError() {
+  const err = new Error('세션이 만료되었습니다. 다시 로그인해 주세요.');
+  err.code = 'AUTH_REQUIRED';
+  window.WarehouseAuth?.handleUnauthorized?.(err.message);
+  return err;
+}
+
 async function getJSON(url) {
   const u = new URL(url, location.origin);
   u.searchParams.set('_', Date.now());
@@ -701,7 +716,11 @@ async function getJSON(url) {
     cache:'no-store',
     headers: await getRequestHeaders(),
   });
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) {
+    const text = await r.text();
+    if (isAuthFailure(r.status, text)) throw authRequiredError();
+    throw new Error(text);
+  }
   return r.json();
 }
 const PENDING_POSTS = new Map();
@@ -718,7 +737,10 @@ async function postJSON(url, body) {
   });
   let data = {};
   try { data = await r.json(); } catch (_) {}
-  if (!r.ok) throw new Error(data.detail || r.statusText || '요청 실패');
+  if (!r.ok) {
+    if (isAuthFailure(r.status, data.detail)) throw authRequiredError();
+    throw new Error(data.detail || r.statusText || '요청 실패');
+  }
   return data;
   })();
   PENDING_POSTS.set(key, request);
@@ -2178,5 +2200,11 @@ if ('serviceWorker' in navigator) {
 }
 
 /* ---------- boot ---------- */
-function start() { init().catch(err => { console.error(err); alert('초기화 실패: ' + (err.message || err)); }); }
+function start() {
+  init().catch(err => {
+    console.error(err);
+    if (err?.code === 'AUTH_REQUIRED') return;
+    alert('초기화 실패: ' + (err.message || err));
+  });
+}
 if (document.readyState === 'loading') { window.addEventListener('DOMContentLoaded', start); } else { start(); }

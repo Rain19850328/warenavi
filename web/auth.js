@@ -155,6 +155,11 @@
     return session;
   }
 
+  function isSessionExpired(marginMs = 0) {
+    if (!session?.expires_at) return true;
+    return (session.expires_at - marginMs) <= Date.now();
+  }
+
   async function ensureSession() {
     getConfig();
 
@@ -162,11 +167,15 @@
       throw new Error("로그인이 필요합니다.");
     }
 
-    if (!session.expires_at || (session.expires_at - REFRESH_MARGIN_MS) <= Date.now()) {
+    if (isSessionExpired(REFRESH_MARGIN_MS)) {
       try {
         await refreshSession();
       } catch (error) {
-        console.warn("refreshSession skipped", error);
+        console.warn("refreshSession failed", error);
+        // 이미 만료된 토큰은 그대로 쓸 수 없으므로 로그인 화면으로 넘긴다.
+        if (isSessionExpired()) {
+          throw new Error("세션이 만료되었습니다. 다시 로그인해 주세요.");
+        }
       }
     }
 
@@ -444,18 +453,6 @@
   async function requireSession() {
     ensureUi();
 
-    if (session?.access_token) {
-      closeAuthScreen();
-      if (!session.user) {
-        hydrateUser()
-          .then(() => renderAuthShell())
-          .catch((error) => console.warn("hydrateUser skipped during boot", error));
-      } else {
-        renderAuthShell();
-      }
-      return session;
-    }
-
     try {
       const current = await ensureSession();
       closeAuthScreen();
@@ -483,8 +480,8 @@
     if (!session?.access_token) {
       throw new Error("로그인이 필요합니다.");
     }
-    if (!session.expires_at || (session.expires_at - REFRESH_MARGIN_MS) <= Date.now()) {
-      refreshSession().catch((error) => console.warn("refreshSession skipped in headers", error));
+    if (isSessionExpired(REFRESH_MARGIN_MS)) {
+      await ensureSession();
     }
     const headers = {
       Authorization: `Bearer ${session.access_token}`,
@@ -517,10 +514,22 @@
     }
   }
 
+  function handleUnauthorized(message) {
+    clearSession();
+    openAuthScreen("signin", message || "세션이 만료되었습니다. 다시 로그인해 주세요.");
+    if (!authGatePromise) {
+      authGatePromise = new Promise((resolve) => {
+        authGateResolve = resolve;
+      });
+    }
+    return authGatePromise;
+  }
+
   window.WarehouseAuth = {
     getApiHeaders,
     getSession: () => session,
     getUser: () => session?.user || null,
+    handleUnauthorized,
     logout,
     render: renderAuthShell,
     requireSession,

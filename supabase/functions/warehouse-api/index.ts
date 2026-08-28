@@ -423,6 +423,10 @@ Deno.serve(async (req) => {
 
     return json(req, { detail: `Unsupported route: ${req.method} ${path}` }, 404);
   } catch (error) {
-    return json(req, { detail: errorMessage(error) }, 400);
+    const message = errorMessage(error);
+    const isAuthError = message === "Authentication is required" ||
+      message === "Invalid or expired session" ||
+      message === "Invalid authenticated user";
+    return json(req, { detail: message }, isAuthError ? 401 : 400);
   }
 });
