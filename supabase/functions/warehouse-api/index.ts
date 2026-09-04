@@ -250,7 +250,11 @@ async function getAuthContext(req: Request): Promise<AuthContext> {
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") || "",
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+  // 새 secret key(sb_secret_...)를 우선 쓰고, 없으면 기존 service_role 키로 넘어간다.
+  // legacy 키를 비활성화해도 서버가 멈추지 않게 하기 위한 것.
+  Deno.env.get("WAREHOUSE_SERVICE_KEY") ||
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+    "",
   {
     auth: { persistSession: false, autoRefreshToken: false },
   },
