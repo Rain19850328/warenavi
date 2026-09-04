@@ -195,7 +195,10 @@
       <div class="auth-shell__user">
         <strong id="authShellName"></strong>
       </div>
-      <button id="authLogoutBtn" type="button" class="auth-shell__logout">로그아웃</button>
+      <div class="auth-shell__actions">
+        <button id="authChangePwBtn" type="button" class="auth-shell__changepw">비밀번호 변경</button>
+        <button id="authLogoutBtn" type="button" class="auth-shell__logout">로그아웃</button>
+      </div>
     `;
     container.prepend(authShell);
 
@@ -239,6 +242,22 @@
             <input id="authSignupPassword" type="password" autocomplete="new-password" minlength="6" required />
           </label>
           <button id="authSignupSubmit" type="submit">회원가입</button>
+        </form>
+        <form id="authChangePwForm" class="auth-form" hidden>
+          <label>
+            <span>현재 비밀번호</span>
+            <input id="authChangePwCurrent" type="password" autocomplete="current-password" required />
+          </label>
+          <label>
+            <span>새 비밀번호</span>
+            <input id="authChangePwNext" type="password" autocomplete="new-password" minlength="6" required />
+          </label>
+          <label>
+            <span>새 비밀번호 확인</span>
+            <input id="authChangePwConfirm" type="password" autocomplete="new-password" minlength="6" required />
+          </label>
+          <button id="authChangePwSubmit" type="submit">비밀번호 변경</button>
+          <button id="authChangePwCancel" type="button" class="auth-form__cancel">취소</button>
         </form>
       </div>
     `;
@@ -286,6 +305,9 @@
     });
     document.getElementById("authSigninForm")?.addEventListener("submit", handleSignin);
     document.getElementById("authSignupForm")?.addEventListener("submit", handleSignup);
+    document.getElementById("authChangePwForm")?.addEventListener("submit", handleChangePassword);
+    document.getElementById("authChangePwCancel")?.addEventListener("click", () => closeAuthScreen());
+    document.getElementById("authChangePwBtn")?.addEventListener("click", () => openChangePassword());
 
     uiMounted = true;
     renderAuthShell();
@@ -323,24 +345,35 @@
     const signupForm = document.getElementById("authSignupForm");
     if (!signinTab || !signupTab || !signinForm || !signupForm) return;
 
-    const signinActive = mode !== "signup";
-    signinTab.hidden = signinActive;
-    signupTab.hidden = !signinActive;
+    const changeForm = document.getElementById("authChangePwForm");
+    const tabs = document.querySelector("#authScreen .auth-tabs");
+
+    const changeActive = mode === "change";
+    const signinActive = !changeActive && mode !== "signup";
+
+    if (tabs) tabs.hidden = changeActive;
+    signinTab.hidden = changeActive || signinActive;
+    signupTab.hidden = changeActive || !signinActive;
     signinTab.classList.remove("is-active");
     signupTab.classList.remove("is-active");
-    signinForm.hidden = !signinActive;
-    signupForm.hidden = signinActive;
+    signinForm.hidden = changeActive || !signinActive;
+    signupForm.hidden = changeActive || signinActive;
+    if (changeForm) changeForm.hidden = !changeActive;
     if (heading) {
-      heading.textContent = signinActive ? "SELLING-ON 창고네비" : "회원가입";
+      heading.textContent = changeActive
+        ? "비밀번호 변경"
+        : signinActive ? "SELLING-ON 창고네비" : "회원가입";
     }
     if (desc) {
       desc.hidden = true;
     }
     setStatus("");
 
-    const focusTarget = signinActive
-      ? document.getElementById("authSigninEmail")
-      : document.getElementById("authSignupName");
+    const focusTarget = changeActive
+      ? document.getElementById("authChangePwCurrent")
+      : signinActive
+        ? document.getElementById("authSigninEmail")
+        : document.getElementById("authSignupName");
     focusTarget?.focus();
   }
 
@@ -450,6 +483,98 @@
     }
   }
 
+  function openChangePassword() {
+    ensureUi();
+    if (!session?.access_token) {
+      openAuthScreen("signin", "로그인이 필요합니다.");
+      return;
+    }
+    clearChangePasswordFields();
+    openAuthScreen("change");
+  }
+
+  function clearChangePasswordFields() {
+    ["authChangePwCurrent", "authChangePwNext", "authChangePwConfirm"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+  }
+
+  function translateAuthError(message) {
+    const text = String(message || "");
+    if (/invalid login credentials/i.test(text)) {
+      return "현재 비밀번호가 올바르지 않습니다.";
+    }
+    if (/should be different/i.test(text)) {
+      return "새 비밀번호는 현재 비밀번호와 다르게 입력해 주세요.";
+    }
+    if (/at least \d+ characters/i.test(text)) {
+      return "비밀번호는 6자 이상이어야 합니다.";
+    }
+    return text || "비밀번호 변경에 실패했습니다.";
+  }
+
+  async function handleChangePassword(event) {
+    event.preventDefault();
+
+    const email = session?.user?.email || "";
+    const current = document.getElementById("authChangePwCurrent")?.value || "";
+    const next = document.getElementById("authChangePwNext")?.value || "";
+    const confirm = document.getElementById("authChangePwConfirm")?.value || "";
+
+    if (!email) {
+      setStatus("사용자 정보를 확인할 수 없습니다. 다시 로그인해 주세요.", true);
+      return;
+    }
+    if (next.length < 6) {
+      setStatus("새 비밀번호는 6자 이상이어야 합니다.", true);
+      return;
+    }
+    if (next !== confirm) {
+      setStatus("새 비밀번호 두 개가 서로 다릅니다.", true);
+      return;
+    }
+    if (next === current) {
+      setStatus("새 비밀번호는 현재 비밀번호와 다르게 입력해 주세요.", true);
+      return;
+    }
+
+    setBusy("authChangePwForm", true);
+    setStatus("");
+
+    try {
+      // 현재 비밀번호로 다시 인증해서 본인 확인 + 새 토큰을 받는다.
+      const reauth = await authRequest("token?grant_type=password", {
+        method: "POST",
+        body: { email, password: current },
+      });
+      if (!reauth?.access_token) {
+        throw new Error("현재 비밀번호가 올바르지 않습니다.");
+      }
+
+      const updated = await authRequest("user", {
+        method: "PUT",
+        token: reauth.access_token,
+        body: { password: next },
+      });
+
+      session = normalizeSession({
+        ...reauth,
+        user: updated?.id ? updated : (reauth.user || session?.user || null),
+      });
+      persistSession();
+      renderAuthShell();
+      clearChangePasswordFields();
+
+      setStatus("비밀번호가 변경되었습니다.", false);
+      setTimeout(() => closeAuthScreen(), 1500);
+    } catch (error) {
+      setStatus(translateAuthError(error?.message || error), true);
+    } finally {
+      setBusy("authChangePwForm", false);
+    }
+  }
+
   async function requireSession() {
     ensureUi();
 
@@ -531,6 +656,7 @@
     getUser: () => session?.user || null,
     handleUnauthorized,
     logout,
+    openChangePassword,
     render: renderAuthShell,
     requireSession,
   };

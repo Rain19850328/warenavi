@@ -54,6 +54,13 @@ body.auth-open { overflow: hidden; }
 .auth-shell__logout{
   margin-left: auto;
 }
+.auth-shell__actions{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
 .auth-screen{
   position: fixed;
   inset: 0;
@@ -160,8 +167,15 @@ body.auth-open { overflow: hidden; }
   margin-top: 0 !important;
 }
 .auth-tabs button[hidden],
+.auth-tabs[hidden],
 .auth-form[hidden]{
   display: none !important;
+}
+.auth-form__cancel{
+  margin-top: 0;
+  background: #fff;
+  border-color: #cbd5e1;
+  color: #334155;
 }
 .auth-form input:focus{
   outline: none;
