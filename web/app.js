@@ -1984,7 +1984,8 @@ function ensureFooterActions(){
         /* 하단 바 높이를 변수로 관리(+ 노치 대응) */
         :root{
           --footer-h: 64px; /* JS로 실제 높이로 재설정됨 */
-          --footer-safe: calc(var(--footer-h) + env(safe-area-inset-bottom, 0px));
+          /* 탭바가 자체적으로 safe-area 패딩을 가지므로 --footer-h(실측 높이)에 이미 포함됨 */
+          --footer-safe: var(--footer-h);
         }
 
         /* 페이지 전체 기본 여백(바가 body를 덮는 경우 대비) */
@@ -1996,51 +1997,21 @@ function ensureFooterActions(){
         /* (안전망) 상세 패널이 자체 스크롤이면 아래 선택자 중 하나가 적용됨 */
         #selPanel, .detail, .detailScroll{ padding-bottom: var(--footer-safe); }
 
+        /* 탭바 모양(.footer-actions.tabbar)은 ui.css에서 관리 */
         .footer-actions{
           position:fixed; left:0; right:0; bottom:0;
-          display:flex; gap:8px; padding:10px 12px;
-          border-top:1px solid #e5e7eb;
-          background:rgba(255,255,255,.94);
-          backdrop-filter:saturate(120%) blur(6px);
           z-index:1000;
-        }
-        .footer-actions .btn{
-          flex:1;
-          display:inline-flex; align-items:center; justify-content:center;
-          padding:10px 12px;
-          border-radius:10px;
-          border:1px solid #cbd5e1;
-          background:#ffffff;
-          font-weight:600;
-          line-height:1.2;
-          cursor:pointer;
-          user-select:none;
-          transition:background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
-        }
-        .footer-actions .btn:hover{
-          background:#f1f5f9;
-          border-color:#94a3b8;
-        }
-        .footer-actions .btn:active{
-          background:#e2e8f0;
-        }
-        @media (pointer:coarse){
-          .footer-actions .btn{ padding:14px; }
         }
       `;
     document.head.append(st);
   }
 
-  // 바 생성 (아이콘 제거, ‘primary’ 제거 -> 둘 다 동일 분위기)
+  // 바 생성 — 탭 버튼은 shell.js가 채운다
   const bar = document.createElement('div');
   bar.id = 'footerActions';
   bar.className = 'footer-actions';
-  bar.innerHTML = `
-    <button id="btnFooterSearch" class="btn">재고검색</button>
-    <button id="btnFooterNewInbound" class="btn">신규입고</button>
-    <button id="btnFooterGoLocation" class="btn">로케이션코드입력</button>
-  `;
   document.body.append(bar);
+  window.Shell.mountTabBar(bar);
 }
 
 
@@ -2126,21 +2097,8 @@ async function init() {
   window.addEventListener('resize', applyFooterSafePadding, { passive:true });
 
 
-
-  // [재고검색] -> 검색창으로 스크롤 & 포커스
-  document.getElementById('btnFooterSearch')?.addEventListener('click', () => {
-    // 변경: 검색 전용 다이얼로그 오픈 (상품명 | 수량 표시)
-    openSearchDialog().catch(err => alert('검색창 오류: ' + (err.message || err)));
-  });
-
-  document.getElementById('btnFooterNewInbound')?.addEventListener('click', () => {
-    openNewInboundDialog().catch(err => alert('신규입고리스트 오류: ' + (err.message || err)));
-  });
-
-  // [로케이션코드입력] -> 코드 입력 받아 해당 위치로 점프
-  document.querySelector('#btnFooterGoLocation')?.addEventListener('click', ()=>{
-    openLocationDialog().catch(err => alert('창 열기 오류: ' + (err.message || err)));
-  });
+  // 탭 전환 시작(주소 해시 기준으로 첫 화면 결정) — 하단 탭 동작은 shell.js 담당
+  window.Shell.start();
 
   await loadCells();
   try {
