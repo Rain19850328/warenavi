@@ -54,6 +54,49 @@ function getPositiveInt(value: string | null, fallback: number) {
   return parsed;
 }
 
+// 날짜 파라미터: 비어 있으면 null(SQL에서 KST 오늘), 형식이 틀리면 400.
+function getDateParam(value: unknown, label = "날짜"): string | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const parsed = /^\d{4}-\d{2}-\d{2}$/.test(text) ? new Date(`${text}T00:00:00Z`) : null;
+  if (!parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== text) {
+    throw new Error(`${label} 형식이 올바르지 않습니다. (YYYY-MM-DD)`);
+  }
+  return text;
+}
+
+function getUuidParam(value: unknown, label: string, required = true): string | null {
+  const text = String(value ?? "").trim();
+  if (!text) {
+    if (required) throw new Error(`${label}이(가) 지정되지 않았습니다.`);
+    return null;
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text)) {
+    throw new Error(`${label} 형식이 올바르지 않습니다.`);
+  }
+  return text;
+}
+
+async function readBody(req: Request): Promise<Record<string, unknown>> {
+  let payload: unknown = null;
+  try {
+    payload = await req.json();
+  } catch (_) {
+    throw new Error("요청 본문 형식이 올바르지 않습니다.");
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("요청 본문 형식이 올바르지 않습니다.");
+  }
+  return payload as Record<string, unknown>;
+}
+
+// 새 경로용 RPC 호출: 오류를 {detail:"<메시지>"} 로 그대로 내려주기 위해 Error로 바꿔 던진다.
+async function callRpc(name: string, args: Record<string, unknown> = {}) {
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) throw new Error(error.message || "요청을 처리하지 못했습니다.");
+  return data;
+}
+
 function normalizeHeader(value: unknown) {
   return String(value ?? "").replace(/\s+/g, "").trim().toLowerCase();
 }
@@ -423,6 +466,268 @@ Deno.serve(async (req) => {
       });
       if (error) throw error;
       return json(req, data);
+    }
+
+    // ---- 상품조회 ----
+    if (req.method === "GET" && path === "/item_options") {
+      return json(req, await callRpc("warehouse_get_item_options"));
+    }
+
+    if (req.method === "GET" && path === "/items_search") {
+      return json(
+        req,
+        await callRpc("warehouse_search_items", {
+          p_q: url.searchParams.get("q") || "",
+          p_limit: getPositiveInt(url.searchParams.get("limit"), 100),
+        }),
+      );
+    }
+
+    if (req.method === "GET" && path === "/item") {
+      return json(
+        req,
+        await callRpc("warehouse_get_item", {
+          p_code: (url.searchParams.get("code") || "").trim(),
+        }),
+      );
+    }
+
+    if (req.method === "POST" && path === "/item/update") {
+      const payload = await readBody(req);
+      const patch = payload.patch;
+      if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+        throw new Error("수정 내용 형식이 올바르지 않습니다.");
+      }
+      return json(
+        req,
+        await callRpc("warehouse_update_item", {
+          p_item_code: String(payload.item_code ?? "").trim(),
+          p_patch: patch,
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    if (req.method === "POST" && path === "/stock_status") {
+      const payload = await readBody(req);
+      return json(
+        req,
+        await callRpc("warehouse_post_stock_status", {
+          p_item_code: String(payload.item_code ?? "").trim(),
+          p_value: String(payload.value ?? "").trim(),
+          p_soldout_id: getUuidParam(payload.soldout_id, "품절관리 항목", false),
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    // ---- 재고확인 ----
+    if (req.method === "GET" && path === "/stock_checks") {
+      const openMismatch = url.searchParams.get("open_mismatch") === "1";
+      return json(
+        req,
+        await callRpc("warehouse_get_stock_check_list", {
+          p_date: openMismatch ? null : getDateParam(url.searchParams.get("date")),
+          p_only_open_mismatch: openMismatch,
+        }),
+      );
+    }
+
+    if (req.method === "POST" && path === "/stock_checks/request") {
+      const payload = await readBody(req);
+      return json(
+        req,
+        await callRpc("warehouse_request_stock_check", {
+          p_item_code: String(payload.item_code ?? "").trim(),
+          p_source: String(payload.source ?? "").trim(),
+          p_note: String(payload.note ?? ""),
+          p_date: getDateParam(payload.date),
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    if (req.method === "POST" && path === "/stock_checks/record") {
+      const payload = await readBody(req);
+      let countedQty: number | null = null;
+      if (payload.counted_qty != null && String(payload.counted_qty).trim() !== "") {
+        countedQty = Number(payload.counted_qty);
+        if (!Number.isInteger(countedQty) || countedQty < 0 || countedQty > 2000000000) {
+          throw new Error("실제 수량은 0 이상의 정수로 입력하세요.");
+        }
+      }
+      return json(
+        req,
+        await callRpc("warehouse_record_stock_check", {
+          p_id: getUuidParam(payload.id, "재고확인 항목"),
+          p_result: String(payload.result ?? "").trim(),
+          p_counted_qty: countedQty,
+          p_reason: String(payload.reason ?? ""),
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    if (req.method === "POST" && path === "/stock_checks/resolve") {
+      const payload = await readBody(req);
+      if (typeof payload.resolved !== "boolean") {
+        throw new Error("처리 여부가 지정되지 않았습니다.");
+      }
+      return json(
+        req,
+        await callRpc("warehouse_resolve_stock_check", {
+          p_id: getUuidParam(payload.id, "재고확인 항목"),
+          p_resolved: payload.resolved,
+          p_note: String(payload.note ?? ""),
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    // ---- 진열보충 ----
+    if (req.method === "GET" && path === "/display_requests") {
+      return json(
+        req,
+        await callRpc("warehouse_get_display_request_list", {
+          p_date: getDateParam(url.searchParams.get("date")),
+        }),
+      );
+    }
+
+    if (req.method === "POST" && path === "/display_requests/request") {
+      const payload = await readBody(req);
+      return json(
+        req,
+        await callRpc("warehouse_request_display", {
+          p_item_code: String(payload.item_code ?? "").trim(),
+          p_source: String(payload.source ?? "").trim(),
+          p_note: String(payload.note ?? ""),
+          p_date: getDateParam(payload.date),
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    if (req.method === "POST" && path === "/display_requests/status") {
+      const payload = await readBody(req);
+      return json(
+        req,
+        await callRpc("warehouse_set_display_request_status", {
+          p_id: getUuidParam(payload.id, "진열 요청 항목"),
+          p_status: String(payload.status ?? "").trim(),
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    // ---- 이형포장 ----
+    if (req.method === "GET" && path === "/irregular_items") {
+      return json(
+        req,
+        await callRpc("warehouse_get_irregular_list", {
+          p_date: getDateParam(url.searchParams.get("date")),
+        }),
+      );
+    }
+
+    if (req.method === "POST" && path === "/irregular_items/update") {
+      const payload = await readBody(req);
+      // 보낸 키만 적용한다. expected_box_count: null 은 "비움"이라 키 존재 여부로 구분.
+      const patch: Record<string, unknown> = {};
+      if ("status" in payload) patch.status = payload.status;
+      if ("expected_box_count" in payload) patch.expected_box_count = payload.expected_box_count;
+      return json(
+        req,
+        await callRpc("warehouse_update_irregular_item", {
+          p_id: getUuidParam(payload.id, "이형포장 항목"),
+          p_patch: patch,
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    // ---- 품절관리 ----
+    if (req.method === "GET" && path === "/soldout_items") {
+      return json(
+        req,
+        await callRpc("warehouse_get_soldout_list", {
+          p_date: getDateParam(url.searchParams.get("date")),
+        }),
+      );
+    }
+
+    if (req.method === "POST" && path === "/soldout_items/add") {
+      const payload = await readBody(req);
+      return json(
+        req,
+        await callRpc("warehouse_add_soldout_item", {
+          p_item_code: String(payload.item_code ?? "").trim(),
+          p_source: String(payload.source ?? "").trim(),
+          p_source_id: getUuidParam(payload.source_id, "출처 항목", false),
+          p_date: getDateParam(payload.date),
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    if (req.method === "POST" && path === "/soldout_items/remove") {
+      const payload = await readBody(req);
+      return json(
+        req,
+        await callRpc("warehouse_remove_soldout_item", {
+          p_id: getUuidParam(payload.id, "품절관리 항목"),
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    // ---- 작업로그 / 탭 뱃지 ----
+    if (req.method === "GET" && path === "/action_logs") {
+      // 쿼리스트링에서 '+'가 공백으로 풀린 ISO 오프셋(" 00:00")을 되돌린다.
+      const beforeRaw = (url.searchParams.get("before") || "").trim()
+        .replace(/(T\d{2}:\d{2}:\d{2}(?:\.\d+)?) (\d{2}:?\d{2})$/, "$1+$2");
+      if (beforeRaw && Number.isNaN(Date.parse(beforeRaw))) {
+        throw new Error("before 값 형식이 올바르지 않습니다.");
+      }
+      return json(
+        req,
+        await callRpc("warehouse_get_action_logs", {
+          p_q: url.searchParams.get("q") || "",
+          p_from: getDateParam(url.searchParams.get("from"), "시작일"),
+          p_to: getDateParam(url.searchParams.get("to"), "종료일"),
+          p_limit: Math.min(getPositiveInt(url.searchParams.get("limit"), 100), 500),
+          p_before: beforeRaw || null,
+        }),
+      );
+    }
+
+    if (req.method === "GET" && path === "/tab_counts") {
+      return json(
+        req,
+        await callRpc("warehouse_get_tab_counts", {
+          p_date: getDateParam(url.searchParams.get("date")),
+        }),
+      );
     }
 
     return json(req, { detail: `Unsupported route: ${req.method} ${path}` }, 404);
