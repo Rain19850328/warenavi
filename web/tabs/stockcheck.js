@@ -476,7 +476,7 @@
         Shell.show('items', { code: r.item_code });
         return;
       case 'match':
-        await write(btn, '/stock_checks/record', { id: r.id, result: 'match', counted_qty: r.db_stock });
+        await write(btn, '/stock_checks/record', { id: r.id, result: 'match' });
         return;
       case 'open-mismatch': openForm(id, 'mismatch'); return;
       case 'open-resolve': openForm(id, 'resolve'); return;
@@ -490,7 +490,7 @@
         return;
       case 'soldout': {
         const res = await UI.busy(btn, () => UI.api.post('/soldout_items/add', {
-          item_code: r.item_code, source: 'stock_check', source_id: r.id, date: r.check_date,
+          item_code: r.item_code, source: 'stock_check', source_id: r.id,
         }));
         if (res === undefined) return;
         UI.toast(res && res.created === false ? '이미 품절관리에 있는 상품입니다' : '품절관리에 추가했습니다', res && res.created === false ? 'info' : 'ok');

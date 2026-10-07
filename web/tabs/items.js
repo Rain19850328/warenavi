@@ -443,7 +443,12 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
     const carrier = form.elements.carrier_type;
     const hint = form.querySelector('[data-hint="carrier"]');
     const forced = Object.prototype.hasOwnProperty.call(FORCED_CARRIER, box);
-    if (forced) carrier.value = FORCED_CARRIER[box];
+    if (forced) {
+      if (!carrier.disabled) carrier.dataset.prev = carrier.value;
+      carrier.value = FORCED_CARRIER[box];
+    } else if (carrier.disabled && carrier.dataset.prev !== undefined) {
+      carrier.value = carrier.dataset.prev;
+    }
     carrier.disabled = forced;
     if (hint) hint.hidden = !forced;
   }

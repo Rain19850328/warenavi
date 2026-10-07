@@ -443,7 +443,6 @@
         item_code: it.item_code,
         source: 'irregular',
         note: text || undefined,
-        date: String(it.work_date || state.date).slice(0, 10),
       });
       if (res && res.created === false) UI.toast('이미 요청된 상품입니다 (요청 내용 추가됨)', 'info');
       else UI.toast(r.okMsg, 'ok');
