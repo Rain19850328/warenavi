@@ -1,5 +1,7 @@
 // scan.js — 사진으로 코드 읽기 (window.Scan)
-// 폰 기본 카메라로 찍은 사진을 줄여서 서버(/scan_code)에 보내고, 서버가 읽어 DB와 대조한 코드 후보를 받는다.
+// 화면 안에서 카메라를 열어 촬영 버튼 한 번으로 찍고(기본 카메라 앱의 '확인' 단계 없음),
+// 사진을 줄여서 서버(/scan_code)에 보내 서버가 읽어 DB와 대조한 코드 후보를 받는다.
+// 카메라 권한이 없거나 지원하지 않는 기기에서는 폰 기본 카메라(파일 선택)로 대신한다.
 // 글자 인식은 서버에서 하므로 이 파일에는 인식 라이브러리가 없다.
 (function () {
   'use strict';
@@ -24,8 +26,9 @@
     return picker;
   }
 
-  // 카메라(또는 사진 선택)를 열고 고른 파일을 돌려준다. 취소하면 null.
-  function pick() {
+  // 폰 기본 카메라(또는 사진 선택)를 열고 고른 파일을 돌려준다. 취소하면 null.
+  // 기본 카메라 앱은 찍은 뒤 '확인/사진 사용'을 한 번 더 눌러야 한다(웹에서 생략할 수 없음).
+  function pickFile() {
     const input = ensurePicker();
     input.value = '';
     return new Promise(resolve => {
@@ -52,6 +55,112 @@
       window.addEventListener('focus', onFocus);
       input.click();
     });
+  }
+
+  /* ---------- 화면 내 카메라 ---------- */
+  const USE_FILE = Symbol('use-file');   // 화면 내 카메라를 못 쓰니 기본 카메라로 가라는 표시
+  let liveBlocked = false;                // 권한 거부·미지원이면 다음부터는 바로 기본 카메라로
+  let camDialog = null;
+
+  function canLive() {
+    return !liveBlocked
+      && typeof HTMLDialogElement !== 'undefined' && typeof HTMLDialogElement.prototype.showModal === 'function'
+      && !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
+  }
+
+  function stopStream(stream) {
+    if (!stream) return;
+    try { stream.getTracks().forEach(track => track.stop()); } catch (_) {}
+  }
+
+  // 미리보기를 띄우고 촬영 버튼을 누르면 그 장면을 바로 파일로 돌려준다.
+  // 결과: File | null(취소) | USE_FILE(카메라를 열지 못함 또는 '기본 카메라' 선택)
+  async function liveCapture() {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+    } catch (_) {
+      liveBlocked = true;
+      return USE_FILE;
+    }
+
+    if (!camDialog || !camDialog.isConnected) {
+      camDialog = document.createElement('dialog');
+      camDialog.className = 'scan-cam';
+      camDialog.innerHTML = `
+        <video class="scan-cam__video" autoplay playsinline muted></video>
+        <p class="scan-cam__hint">라벨의 코드가 화면에 크게 들어오게 맞춘 뒤 촬영하세요</p>
+        <div class="scan-cam__bar">
+          <button type="button" class="scan-cam__side" data-cam="cancel">취소</button>
+          <button type="button" class="scan-cam__shutter" data-cam="shoot" aria-label="촬영" disabled></button>
+          <button type="button" class="scan-cam__side" data-cam="file">기본 카메라</button>
+        </div>`;
+      document.body.append(camDialog);
+    }
+    const dlg = camDialog;
+    const video = dlg.querySelector('video');
+    const shutter = dlg.querySelector('[data-cam="shoot"]');
+    shutter.disabled = true;
+
+    return new Promise(resolve => {
+      let settled = false;
+      const finish = value => {
+        if (settled) return;
+        settled = true;
+        dlg.removeEventListener('click', onClick);
+        dlg.removeEventListener('close', onClose);
+        dlg.removeEventListener('cancel', onClose);
+        video.removeEventListener('loadedmetadata', onReady);
+        try { video.pause(); } catch (_) {}
+        video.srcObject = null;
+        stopStream(stream);
+        if (dlg.open) dlg.close();
+        resolve(value);
+      };
+      const onReady = () => { if (video.videoWidth && video.videoHeight) shutter.disabled = false; };
+      const shoot = () => {
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        if (!w || !h) return;
+        shutter.disabled = true;
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+        canvas.toBlob(blob => {
+          finish(blob ? new File([blob], 'scan.jpg', { type: 'image/jpeg' }) : null);
+        }, 'image/jpeg', 0.92);
+      };
+      const onClick = ev => {
+        const el = ev.target.closest('[data-cam]');
+        if (!el) return;
+        if (el.dataset.cam === 'shoot') shoot();
+        else if (el.dataset.cam === 'file') finish(USE_FILE);
+        else finish(null);
+      };
+      const onClose = () => finish(null);   // Esc·뒤로가기로 닫힌 경우
+      dlg.addEventListener('click', onClick);
+      dlg.addEventListener('close', onClose);
+      dlg.addEventListener('cancel', onClose);
+      video.addEventListener('loadedmetadata', onReady);
+      video.srcObject = stream;
+      dlg.showModal();
+      const playing = video.play();
+      if (playing && typeof playing.catch === 'function') playing.catch(() => {});
+      onReady();
+    });
+  }
+
+  // 촬영해서 사진 파일을 돌려준다. 취소하면 null.
+  async function pick() {
+    if (canLive()) {
+      const result = await liveCapture();
+      if (result !== USE_FILE) return result;
+    }
+    return pickFile();
   }
 
   function loadImage(file) {
