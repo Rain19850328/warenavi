@@ -428,6 +428,28 @@
     return true;
   }
 
+  // 일치로 확인한 재고가 기준 미만이면 품절관리에 자동으로 올린다.
+  const AUTO_SOLDOUT_BELOW = 10;
+  async function autoSoldout(id) {
+    const r = state.index.get(String(id));
+    if (!r || r.status !== 'match' || r.in_soldout) return;
+    const qty = numOrNull(r.counted_qty) ?? totalStock(r);
+    if (qty === null || qty >= AUTO_SOLDOUT_BELOW) return;
+    try {
+      const res = await UI.api.post('/soldout_items/add', { item_code: r.item_code, source: 'stock_check', source_id: r.id });
+      const cur = state.index.get(String(id));
+      if (cur) { cur.in_soldout = true; replaceRow(id); }
+      UI.toast(res && res.created === false
+        ? `재고 ${UI.num(qty)}개 · 이미 품절관리에 있는 상품입니다`
+        : `재고 ${UI.num(qty)}개 · 품절관리에 자동으로 추가했습니다`, 'info');
+      Shell.refreshBadges();
+    } catch (err) {
+      if (!err || err.code !== 'AUTH_REQUIRED') {
+        UI.toast(`품절관리 자동 추가 실패: ${(err && err.message) || '요청에 실패했습니다.'}`, 'error');
+      }
+    }
+  }
+
   function openForm(id, kind) {
     const prev = state.form;
     state.form = { id: String(id), kind };
@@ -488,7 +510,7 @@
         Shell.show('items', { code: r.item_code });
         return;
       case 'match':
-        await write(btn, '/stock_checks/record', { id: r.id, result: 'match' });
+        if (await write(btn, '/stock_checks/record', { id: r.id, result: 'match' })) await autoSoldout(id);
         return;
       case 'open-mismatch': openForm(id, 'mismatch'); return;
       case 'open-resolve': openForm(id, 'resolve'); return;
