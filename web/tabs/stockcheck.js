@@ -1,5 +1,5 @@
 // tabs/stockcheck.js — 재고확인 탭
-// 날짜별 재고확인 대상(자동 + 요청)을 보여 주고 일치/불일치를 기록한다. DB 재고는 바꾸지 않는다.
+// 날짜별 재고확인 대상(자동 + 요청)을 보여 주고 일치/불일치를 기록한다. 총 재고(MOPS가 넣는 값)는 바꾸지 않는다.
 (function () {
   'use strict';
 
@@ -25,7 +25,10 @@
   font: inherit; font-size: 13px; font-weight: 700; color: #0369a1; text-decoration: underline;
 }
 .tab-stockcheck .sc-loc{ font-size: 14px; font-weight: 700; color: #0f172a; }
-.tab-stockcheck .sc-stock b{ font-size: 14px; color: #0f172a; }
+.tab-stockcheck .sc-total{ display: flex; flex-direction: column; align-items: flex-end; min-width: 64px; line-height: 1.1; }
+.tab-stockcheck .sc-total__label{ font-size: 12px; font-weight: 600; color: #64748b; }
+.tab-stockcheck .sc-total__num{ font-size: 30px; font-weight: 800; color: #0f172a; }
+.tab-stockcheck .sc-total__num.is-zero{ color: #b91c1c; }
 .tab-stockcheck .sc-note{
   margin-top: 6px; padding: 6px 8px; border-radius: 8px;
   background: #f1f5f9; font-size: 13px; line-height: 1.4; color: #334155; word-break: break-word;
@@ -190,8 +193,21 @@
     return `<button type="button" class="${urgent ? 'btn-danger' : 'btn-ghost btn-sm'}" data-act="soldout">품절관리에 추가</button>`;
   }
 
+  // 미확인 줄은 '일치'가 기록할 지금 재고를, 확인한 줄은 확인 당시 재고를 보여 준다.
+  function totalStock(r) {
+    const db = numOrNull(r.db_stock);
+    const live = numOrNull(r.stock_today);
+    return r.status === 'pending' ? (live ?? db) : (db ?? live);
+  }
+
   function sideHtml(r) {
     const parts = [];
+    const total = totalStock(r);
+    parts.push(`<div class="sc-total"><span class="sc-total__label">총 재고</span><span class="sc-total__num${total === 0 ? ' is-zero' : ''}">${esc(UI.num(total))}</span></div>`);
+    const liveNow = numOrNull(r.stock_today);
+    if (r.status !== 'pending' && liveNow !== null && total !== null && liveNow !== total) {
+      parts.push(`<span class="sc-side-sub">현재 ${esc(UI.num(liveNow))}</span>`);
+    }
     if (r.status === 'match' || r.status === 'mismatch') {
       parts.push(UI.chip(r.status === 'match' ? '일치' : '불일치', r.status === 'match' ? 'ok' : 'danger'));
       if (r.status === 'mismatch' && r.resolved) parts.push(UI.chip('처리완료', 'ok'));
@@ -254,7 +270,8 @@
       out.push(`<button type="button" class="btn-ghost btn-sm" data-act="open-mismatch"${formKind === 'mismatch' ? ' disabled' : ''}>수량·사유 수정</button>`);
       out.push('<button type="button" class="btn-ghost btn-sm" data-act="reset">다시 확인</button>');
     }
-    out.push(soldoutHtml(r));
+    // 품절관리 추가는 일치·불일치를 기록한 뒤에만 보인다.
+    if (r.status !== 'pending') out.push(soldoutHtml(r));
     return out.join('');
   }
 
@@ -269,11 +286,6 @@
     if (r.status === 'mismatch' && !done) cls.push('sc-row--mismatch');
     else if (r.status === 'match') cls.push('sc-row--match');
     else if (requested) cls.push('sc-row--req');
-
-    const db = numOrNull(r.db_stock);
-    const live = numOrNull(r.stock_today);
-    let stock = `DB재고 <b>${esc(UI.num(db))}</b>`;
-    if (live !== null && live !== db) stock += ` · 현재 <b>${esc(UI.num(live))}</b>`;
 
     const chips = [];
     if (state.openMode && r.check_date) chips.push(UI.chip(r.check_date, 'warn'));
@@ -303,7 +315,7 @@
         <div class="wl-main">
           <button type="button" class="wl-code sc-code" data-act="open-item" title="상품조회에서 보기">${esc(r.item_code)}</button>
           <div class="wl-name">${esc(r.item_name)}</div>
-          <div class="wl-meta"><span class="sc-loc">${esc(locText(r.location_code))}</span><span class="sc-stock">${stock}</span></div>
+          <div class="wl-meta"><span class="sc-loc">${esc(locText(r.location_code))}</span></div>
           <div class="wl-meta">${UI.rackChips(r.racks)}</div>
           <div class="wl-meta">${chips.join('')}</div>
           ${notes.join('')}
