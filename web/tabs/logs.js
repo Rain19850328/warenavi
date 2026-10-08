@@ -102,16 +102,16 @@
       let skippedText = '';
       if (skipped.length) {
         const shown = skipped.slice(0, 5).join(', ');
-        skippedText = `미등록 코드 제외: ${shown}${skipped.length > 5 ? ` 외 ${skipped.length - 5}건` : ''}`;
+        skippedText = `상품 DB에 없는 코드: ${shown}${skipped.length > 5 ? ` 외 ${skipped.length - 5}건` : ''}`;
       }
       return ['이형포장', 'muted', 'irregular', joinParts([
-        `MOPS 이형리스트 저장: 신규 ${count(d.inserted)} / 갱신 ${count(d.updated)} / 제외표시 ${count(d.stale)} / 삭제 ${count(d.deleted)}`,
+        `MOPS 이형리스트 저장: 묶음 신규 ${count(d.inserted)} / 갱신 ${count(d.updated)} / 제외표시 ${count(d.stale)} / 삭제 ${count(d.deleted)}`,
         skippedText,
       ])];
     },
-    irregular_status: d => ['이형포장', 'info', 'irregular', `상태: ${val(d.old)} → ${val(d.new)}`],
+    irregular_status: d => ['이형포장', 'info', 'irregular', joinParts([`상태: ${val(d.old)} → ${val(d.new)}`, d.bundle_no ? `묶음 ${text(d.bundle_no)}` : ''])],
     irregular_box_count: d => ['이형포장', 'muted', 'irregular',
-      `예상박스: ${val(d.old, '미입력')} → ${val(d.new, '미입력')}`],
+      joinParts([`예상박스: ${val(d.old, '미입력')} → ${val(d.new, '미입력')}`, d.bundle_no ? `묶음 ${text(d.bundle_no)}` : ''])],
     soldout_add: d => ['품절관리', 'danger', 'soldout', withSource('품절관리 등록', d.source)],
     soldout_remove: () => ['품절관리', 'muted', 'soldout', '품절관리에서 제거'],
   };

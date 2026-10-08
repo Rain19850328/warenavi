@@ -1,5 +1,6 @@
 // tabs/irregular.js — 이형포장 탭
-// MOPS가 엑셀 출력 시 저장한 그날의 이형 품목을 포장 담당자가 위에서부터 처리한다.
+// MOPS가 엑셀 출력 시 저장한 그날의 이형 묶음(주문 1건 = 카드 1장)을 포장 담당자가 위에서부터 처리한다.
+// 작업 상태·예상박스는 묶음에 한 번, 재고확인·진열 요청은 묶음 안 상품마다 둔다.
 (function () {
   'use strict';
 
@@ -24,12 +25,12 @@
     dateBar: null,
     date: '',
     followToday: true,   // 사용자가 다른 날짜를 고르지 않았으면 날짜가 바뀔 때 오늘을 따라간다
-    items: [],
+    bundles: [],
     loaded: false,       // 현재 날짜의 목록을 한 번이라도 받았는지
     error: '',
     filter: 'all',
     seq: 0,              // 늦게 도착한 응답 무시용
-    note: null,          // 열려 있는 요청 메모칸 {id, kind, text}
+    note: null,          // 열려 있는 요청 메모칸 {id(묶음), line(상품 줄), kind, text}
     rendering: false,    // 목록을 통째로 다시 그리는 중(이때 생기는 focusout 무시)
   };
 
@@ -51,7 +52,12 @@
     const s = String(v ?? '').trim();
     return !s || s === '00' ? '위치 미지정' : s;
   }
-  function findItem(id) { return state.items.find(it => String(it.id) === String(id)); }
+  function findBundle(id) { return state.bundles.find(b => String(b.id) === String(id)); }
+  function linesOf(b) { return Array.isArray(b && b.items) ? b.items : []; }
+  function findLine(b, lineId) { return linesOf(b).find(l => String(l.id) === String(lineId)); }
+  function bundleLabel(b) {
+    return `묶음 ${String(b.bundle_no ?? '').trim() || '-'}`;
+  }
   function rowEl(id) {
     if (!state.els.body) return null;
     for (const li of state.els.body.querySelectorAll('.wl-row')) {
@@ -63,18 +69,32 @@
     const li = el && el.closest ? el.closest('.wl-row') : null;
     return li ? li.dataset.id : null;
   }
+  function lineIdOf(el) {
+    const line = el && el.closest ? el.closest('.irr-line') : null;
+    return line ? line.dataset.line : null;
+  }
   function boxInput(id) {
     const li = rowEl(id);
     return li ? li.querySelector('input[data-role="box"]') : null;
   }
+  function noteInput() {
+    return state.els.body ? state.els.body.querySelector('input[data-role="note"]') : null;
+  }
   function cmp(a, b) {
     return String(a ?? '').localeCompare(String(b ?? ''), 'ko', { numeric: true });
   }
-  function sortItems(list) {
+  // 위치가 없는 묶음은 맨 뒤로 보낸다.
+  function firstLoc(b) {
+    const locs = linesOf(b).map(l => String(l.location_code ?? '').trim()).filter(v => v && v !== '00').sort(cmp);
+    return locs.length ? locs[0] : null;
+  }
+  function sortBundles(list) {
     return list.slice().sort((a, b) => {
       const da = a.status === '포장완료' ? 1 : 0;
       const db = b.status === '포장완료' ? 1 : 0;
-      return da - db || cmp(a.location_code, b.location_code) || cmp(a.item_code, b.item_code);
+      const la = firstLoc(a);
+      const lb = firstLoc(b);
+      return da - db || (la === null) - (lb === null) || cmp(la, lb) || cmp(a.bundle_no, b.bundle_no);
     });
   }
 
@@ -88,11 +108,19 @@
 .tab-irregular .irr-summary b{ color:#0f172a; }
 .tab-irregular .irr-batch{ margin:14px 0 6px; font-size:13px; font-weight:700; color:#475569; word-break:break-all; }
 .tab-irregular .irr-batch:first-child{ margin-top:0; }
+.tab-irregular .irr-head{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; }
+.tab-irregular .irr-title{ font-size:16px; font-weight:800; color:#0f172a; word-break:break-all; }
+.tab-irregular .irr-lines{ margin:8px 0 0; padding:0; list-style:none; }
+.tab-irregular .irr-line{ padding:10px 0; border-top:1px solid #e2e8f0; }
+.tab-irregular .irr-line-top{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.tab-irregular .irr-line .wl-actions{ margin-top:6px; }
+.tab-irregular .irr-bundle-actions{ padding-top:10px; border-top:1px solid #e2e8f0; }
 .tab-irregular .irr-loc{ font-size:20px; font-weight:800; line-height:1.25; color:#0f172a; word-break:break-all; }
 .tab-irregular .irr-code{ appearance:none; display:inline-block; min-height:32px; padding:4px 0; border:0; background:none; color:#0369a1; font:inherit; font-size:13px; text-decoration:underline; text-align:left; cursor:pointer; }
-.tab-irregular .irr-qty{ font-size:14px; font-weight:700; color:#0f172a; }
+.tab-irregular .irr-qty{ flex:0 0 auto; font-size:20px; font-weight:800; color:#0f172a; white-space:nowrap; }
 .tab-irregular .wl-row.is-done{ opacity:1; }
-.tab-irregular .wl-row.is-done .wl-main{ opacity:.55; }
+.tab-irregular .wl-row{ display:block; }
+.tab-irregular .wl-row.is-done .irr-head, .tab-irregular .wl-row.is-done .irr-lines{ opacity:.55; }
 .tab-irregular .btn-sm, .tab-irregular .btn-primary, .tab-irregular .btn-ghost{ min-height:44px; }
 .tab-irregular .seg > button{ min-height:44px; }
 .tab-irregular .irr-filter{ flex:1 1 260px; }
@@ -108,7 +136,7 @@
 .tab-irregular .irr-tick{ width:14px; color:#16a34a; font-weight:700; opacity:0; transition:opacity .2s ease; }
 .tab-irregular .irr-tick.is-on{ opacity:1; }
 .tab-irregular .irr-req.is-requested{ background:#e0f2fe; border-color:#7dd3fc; color:#075985; }
-.tab-irregular .irr-note{ flex:1 0 100%; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding-top:8px; border-top:1px dashed #e2e8f0; }
+.tab-irregular .irr-note{ display:flex; margin-top:8px; flex-wrap:wrap; align-items:center; gap:8px; padding-top:8px; border-top:1px dashed #e2e8f0; }
 .tab-irregular .irr-note[hidden]{ display:none; }
 .tab-irregular .irr-note label{ flex:1 0 100%; font-size:12px; font-weight:600; color:#475569; }
 .tab-irregular .irr-note input{ flex:1 1 160px; min-width:0; height:44px; padding:0 10px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#0f172a; font:inherit; font-size:16px; }
@@ -119,38 +147,30 @@
   }
 
   /* ---------- html builders ---------- */
-  function mainHtml(it) {
-    const mixed = Number(it.mixed_order_count) > 0 ? `<span>합포 ${esc(UI.num(it.mixed_order_count))}건</span>` : '';
-    const changed = it.status_changed_at || it.status_changed_by_name
-      ? `<div class="wl-meta">상태 변경: ${esc(it.status_changed_by_name || '-')}${it.status_changed_at ? ' · ' + esc(UI.fmtDateTime(it.status_changed_at)) : ''}</div>`
+  function headHtml(b) {
+    const status = STATUSES.includes(b.status) ? b.status : '대기';
+    const n = linesOf(b).length;
+    const changed = b.status_changed_at || b.status_changed_by_name
+      ? `<div class="wl-meta">상태 변경: ${esc(b.status_changed_by_name || '-')}${b.status_changed_at ? ' · ' + esc(UI.fmtDateTime(b.status_changed_at)) : ''}</div>`
       : '';
     return `
-      <div class="irr-loc">${esc(locText(it.location_code))}</div>
-      <button type="button" class="wl-code irr-code" data-act="open-item">${esc(it.item_code)}</button>
-      <div class="wl-name">${esc(it.item_name)}</div>
-      <div class="wl-meta">
-        <span class="irr-qty">수량 ${esc(UI.num(it.qty))}</span>
-        <span>주문 ${esc(UI.num(it.order_count))}건</span>
-        ${mixed}
-        <span>재고 ${esc(UI.num(it.stock_today))}</span>
+      <div class="irr-head">
+        <span class="irr-title">${esc(bundleLabel(b))}</span>
+        ${n > 1 ? UI.chip(`합포장 ${n}종`, 'info') : ''}
+        ${UI.chip(status, STATUS_TONE[status])}
+        ${b.stale ? UI.chip('주문서에서 제외됨', 'danger') : ''}
       </div>
-      <div class="wl-meta">${UI.rackChips(it.racks)}</div>
       ${changed}`;
   }
 
-  function sideHtml(it) {
-    const status = STATUSES.includes(it.status) ? it.status : '대기';
-    return UI.chip(status, STATUS_TONE[status]) + (it.stale ? UI.chip('주문서에서 제외됨', 'danger') : '');
-  }
-
-  function statusHtml(it) {
+  function statusHtml(b) {
     return STATUSES.map(s =>
-      `<button type="button" data-act="status" data-value="${esc(s)}"${it.status === s ? ' class="is-active" aria-pressed="true"' : ' aria-pressed="false"'}>${esc(s)}</button>`
+      `<button type="button" data-act="status" data-value="${esc(s)}"${b.status === s ? ' class="is-active" aria-pressed="true"' : ' aria-pressed="false"'}>${esc(s)}</button>`
     ).join('');
   }
 
-  function reqHtml(it) {
-    const open = it.open_requests || {};
+  function reqHtml(line) {
+    const open = line.open_requests || {};
     return Object.keys(REQUESTS).map(kind => {
       const r = REQUESTS[kind];
       const on = !!open[r.key];
@@ -167,23 +187,40 @@
       <button type="button" class="btn-ghost" data-act="note-cancel">취소</button>`;
   }
 
-  function rowHtml(it) {
-    const note = state.note && String(state.note.id) === String(it.id) ? state.note : null;
-    const box = toInt(it.expected_box_count);
+  function lineHtml(b, line) {
+    const note = state.note && String(state.note.id) === String(b.id) && String(state.note.line) === String(line.id) ? state.note : null;
     return `
-      <li class="wl-row${it.status === '포장완료' ? ' is-done' : ''}" data-id="${esc(it.id)}">
-        <div class="wl-main" data-part="main">${mainHtml(it)}</div>
-        <div class="wl-side" data-part="side">${sideHtml(it)}</div>
-        <div class="wl-actions">
-          <div class="seg irr-status" data-part="status" role="group" aria-label="작업 상태">${statusHtml(it)}</div>
+      <li class="irr-line" data-line="${esc(line.id)}">
+        <div class="irr-line-top">
+          <span class="irr-loc">${esc(locText(line.location_code))}</span>
+          <span class="irr-qty">${esc(UI.num(line.qty))}개</span>
+        </div>
+        <button type="button" class="wl-code irr-code" data-act="open-item">${esc(line.item_code)}</button>
+        <div class="wl-name">${esc(line.item_name)}</div>
+        <div class="wl-meta"><span>재고 ${esc(UI.num(line.stock_today))}</span> ${UI.rackChips(line.racks)}</div>
+        <div class="wl-actions">${reqHtml(line)}</div>
+        <div class="irr-note"${note ? '' : ' hidden'}>${note ? noteHtml(note) : ''}</div>
+      </li>`;
+  }
+
+  function linesHtml(b) {
+    return linesOf(b).map(line => lineHtml(b, line)).join('');
+  }
+
+  function rowHtml(b) {
+    const box = toInt(b.expected_box_count);
+    return `
+      <li class="wl-row${b.status === '포장완료' ? ' is-done' : ''}" data-id="${esc(b.id)}">
+        <div data-part="head">${headHtml(b)}</div>
+        <ul class="irr-lines" data-part="lines">${linesHtml(b)}</ul>
+        <div class="wl-actions irr-bundle-actions">
+          <div class="seg irr-status" data-part="status" role="group" aria-label="묶음 작업 상태">${statusHtml(b)}</div>
           <label class="irr-box">예상박스
             <input type="text" data-role="box" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"
                    placeholder="-" aria-label="예상박스수량" value="${box === null ? '' : esc(box)}" />
             <span class="irr-tick" data-role="tick" aria-hidden="true">✓</span>
           </label>
         </div>
-        <div class="wl-actions" data-part="req">${reqHtml(it)}</div>
-        <div class="irr-note" data-part="note"${note ? '' : ' hidden'}>${note ? noteHtml(note) : ''}</div>
       </li>`;
   }
 
@@ -191,18 +228,18 @@
   function renderSummary() {
     const el = state.els.summary;
     if (!el) return;
-    if (!state.loaded || !state.items.length) { el.hidden = true; el.innerHTML = ''; return; }
+    if (!state.loaded || !state.bundles.length) { el.hidden = true; el.innerHTML = ''; return; }
     let qty = 0, boxes = 0, missing = 0;
     const count = { '대기': 0, '작업중': 0, '포장완료': 0 };
-    for (const it of state.items) {
-      qty += Number(it.qty) || 0;
-      const box = toInt(it.expected_box_count);
+    for (const b of state.bundles) {
+      for (const line of linesOf(b)) qty += Number(line.qty) || 0;
+      const box = toInt(b.expected_box_count);
       if (box === null) missing += 1; else boxes += box;
-      if (count[it.status] !== undefined) count[it.status] += 1;
+      if (count[b.status] !== undefined) count[b.status] += 1;
     }
     el.hidden = false;
     el.innerHTML =
-      `총 <b>${esc(UI.num(state.items.length))}</b>개 품목 · 수량 합계 <b>${esc(UI.num(qty))}</b> · ` +
+      `총 <b>${esc(UI.num(state.bundles.length))}</b>묶음 · 수량 합계 <b>${esc(UI.num(qty))}</b> · ` +
       `대기 <b>${count['대기']}</b> / 작업중 <b>${count['작업중']}</b> / 포장완료 <b>${count['포장완료']}</b> · ` +
       `예상박스 합계 <b>${esc(UI.num(boxes))}</b>${missing ? ` (미입력 ${esc(UI.num(missing))}건)` : ''}`;
   }
@@ -225,19 +262,19 @@
       }
       return '<p class="empty">불러오는 중…</p>';
     }
-    if (!state.items.length) return `<p class="empty">${esc(EMPTY_TEXT)}</p>`;
+    if (!state.bundles.length) return `<p class="empty">${esc(EMPTY_TEXT)}</p>`;
 
-    const shown = state.filter === 'all' ? state.items : state.items.filter(it => it.status === state.filter);
-    if (!shown.length) return `<p class="empty">'${esc(state.filter)}' 상태인 품목이 없습니다.</p>`;
+    const shown = state.filter === 'all' ? state.bundles : state.bundles.filter(b => b.status === state.filter);
+    if (!shown.length) return `<p class="empty">'${esc(state.filter)}' 상태인 묶음이 없습니다.</p>`;
 
-    const batches = Array.from(new Set(state.items.map(it => String(it.batch_key ?? '')))).sort(cmp);
+    const batches = Array.from(new Set(state.bundles.map(b => String(b.batch_key ?? '')))).sort(cmp);
     if (batches.length <= 1) {
-      return `<ul class="wl-list">${sortItems(shown).map(rowHtml).join('')}</ul>`;
+      return `<ul class="wl-list">${sortBundles(shown).map(rowHtml).join('')}</ul>`;
     }
     return batches.map(key => {
-      const rows = sortItems(shown.filter(it => String(it.batch_key ?? '') === key));
+      const rows = sortBundles(shown.filter(b => String(b.batch_key ?? '') === key));
       if (!rows.length) return '';
-      return `<h3 class="irr-batch">${esc(key || '(주문서 이름 없음)')} · ${rows.length}개</h3>
+      return `<h3 class="irr-batch">${esc(key || '(주문서 이름 없음)')} · ${rows.length}묶음</h3>
         <ul class="wl-list">${rows.map(rowHtml).join('')}</ul>`;
     }).join('');
   }
@@ -247,27 +284,27 @@
     const body = state.els.body;
     if (!body) return;
     const active = document.activeElement;
-    let keep = null;
-    if (active && body.contains(active) && active.matches('input[data-role="box"], input[data-role="note"]')) {
-      keep = { role: active.dataset.role, id: rowIdOf(active), value: active.value };
+    let keepBox = null;
+    if (active && body.contains(active) && active.matches('input[data-role="box"]')) {
+      keepBox = { id: rowIdOf(active), value: active.value };
     }
-    if (state.note) {
-      const li = rowEl(state.note.id);
-      const input = li && li.querySelector('input[data-role="note"]');
-      if (input) state.note.text = input.value;
-    }
+    const noteFocused = !!(active && body.contains(active) && active.matches('input[data-role="note"]'));
+    const prevNote = noteInput();
+    if (state.note && prevNote) state.note.text = prevNote.value;
 
     state.rendering = true;
     try { body.innerHTML = listHtml(); } finally { state.rendering = false; }
 
-    if (state.note && !rowEl(state.note.id)) state.note = null;
-    if (keep && keep.id) {
-      const li = rowEl(keep.id);
-      const input = li && li.querySelector(`input[data-role="${keep.role}"]`);
+    if (state.note && !noteInput()) state.note = null;
+    if (keepBox && keepBox.id) {
+      const input = boxInput(keepBox.id);
       if (input) {
-        input.value = keep.value;
+        input.value = keepBox.value;
         try { input.focus({ preventScroll: true }); } catch (_) {}
       }
+    } else if (noteFocused) {
+      const input = noteInput();
+      if (input) { try { input.focus({ preventScroll: true }); } catch (_) {} }
     }
   }
 
@@ -277,36 +314,38 @@
     renderList();
   }
 
-  // 한 행만 제자리에서 갱신한다. 예상박스 입력칸과 메모칸은 건드리지 않는다.
-  function patchRow(it) {
-    const li = rowEl(it.id);
+  // 한 묶음만 제자리에서 갱신한다. 예상박스 입력칸은 건드리지 않는다.
+  function patchRow(b) {
+    const li = rowEl(b.id);
     if (!li) return;
-    li.classList.toggle('is-done', it.status === '포장완료');
+    const prevNote = li.querySelector('input[data-role="note"]');
+    if (state.note && prevNote) state.note.text = prevNote.value;
+    li.classList.toggle('is-done', b.status === '포장완료');
     const set = (part, html) => {
       const el = li.querySelector(`[data-part="${part}"]`);
       if (el) el.innerHTML = html;
     };
-    set('main', mainHtml(it));
-    set('side', sideHtml(it));
-    set('status', statusHtml(it));
-    set('req', reqHtml(it));
+    set('head', headHtml(b));
+    set('lines', linesHtml(b));
+    set('status', statusHtml(b));
     const input = li.querySelector('input[data-role="box"]');
     if (input && input !== document.activeElement && !input.disabled) {
-      const box = toInt(it.expected_box_count);
+      const box = toInt(b.expected_box_count);
       input.value = box === null ? '' : String(box);
     }
   }
 
+  // 메모칸이 열리거나 닫힌 묶음의 상품 줄을 다시 그린다.
   function renderNote(prevId) {
     const ids = new Set([prevId, state.note && state.note.id].filter(v => v !== null && v !== undefined).map(String));
     for (const id of ids) {
+      const b = findBundle(id);
       const li = rowEl(id);
-      const el = li && li.querySelector('[data-part="note"]');
-      if (!el) continue;
-      const open = state.note && String(state.note.id) === id;
-      el.hidden = !open;
-      el.innerHTML = open ? noteHtml(state.note) : '';
+      const el = li && li.querySelector('[data-part="lines"]');
+      if (b && el) el.innerHTML = linesHtml(b);
     }
+    const input = noteInput();
+    if (input) { try { input.focus({ preventScroll: true }); } catch (_) {} }
   }
 
   /* ---------- data ---------- */
@@ -317,7 +356,7 @@
     try {
       const res = await UI.api.get('/irregular_items', { date });
       if (seq !== state.seq) return;
-      state.items = Array.isArray(res && res.items) ? res.items : [];
+      state.bundles = Array.isArray(res && res.bundles) ? res.bundles : [];
       state.loaded = true;
       state.error = '';
     } catch (err) {
@@ -336,18 +375,18 @@
   function setDate(ymd) {
     if (ymd === state.date) return;
     state.date = ymd;
-    state.items = [];
+    state.bundles = [];
     state.loaded = false;
     state.error = '';
     state.note = null;
   }
 
-  // 서버가 돌려준 item으로 교체(없으면 보낸 값만 반영)하고 그 행·요약·뱃지를 갱신한다.
-  function applyItem(id, serverItem, fallback) {
-    const idx = state.items.findIndex(it => String(it.id) === String(id));
+  // 서버가 돌려준 묶음으로 교체(없으면 보낸 값만 반영)하고 그 카드·요약·뱃지를 갱신한다.
+  function applyBundle(id, serverBundle, fallback) {
+    const idx = state.bundles.findIndex(b => String(b.id) === String(id));
     if (idx < 0) return;
-    const merged = Object.assign({}, state.items[idx], serverItem && typeof serverItem === 'object' ? serverItem : fallback);
-    state.items[idx] = merged;
+    const merged = Object.assign({}, state.bundles[idx], serverBundle && typeof serverBundle === 'object' ? serverBundle : fallback);
+    state.bundles[idx] = merged;
     patchRow(merged);
     renderSummary();
     Shell.refreshBadges();
@@ -364,11 +403,11 @@
   }
 
   async function setStatus(btn, id, value) {
-    const it = findItem(id);
-    if (!it || !STATUSES.includes(value) || it.status === value) return;
+    const b = findBundle(id);
+    if (!b || !STATUSES.includes(value) || b.status === value) return;
     await UI.busy(btn, async () => {
-      const res = await postInOrder('/irregular_items/update', { id: it.id, status: value });
-      applyItem(id, res && res.item, { status: value });
+      const res = await postInOrder('/irregular_items/update', { id: b.id, status: value });
+      applyBundle(id, res && res.bundle, { status: value });
     });
   }
 
@@ -383,9 +422,9 @@
   async function saveBox(input) {
     if (state.rendering || input.disabled) return;
     const id = rowIdOf(input);
-    const it = id === null ? null : findItem(id);
-    if (!it) return;
-    const prev = toInt(it.expected_box_count);
+    const b = id === null ? null : findBundle(id);
+    if (!b) return;
+    const prev = toInt(b.expected_box_count);
     const prevText = prev === null ? '' : String(prev);
     const raw = input.value.trim();
     let next;
@@ -400,14 +439,14 @@
 
     input.disabled = true;
     const ok = await UI.busy(null, async () => {
-      const res = await postInOrder('/irregular_items/update', { id: it.id, expected_box_count: next });
-      applyItem(id, res && res.item, { expected_box_count: next });
+      const res = await postInOrder('/irregular_items/update', { id: b.id, expected_box_count: next });
+      applyBundle(id, res && res.bundle, { expected_box_count: next });
       return true;
     });
     input.disabled = false;
     // 저장 중 목록이 다시 그려졌을 수 있으므로 지금 화면의 입력칸을 다시 찾는다.
     const cur = boxInput(id);
-    const now = findItem(id);
+    const now = findBundle(id);
     if (cur && cur !== document.activeElement) {
       const val = now ? toInt(now.expected_box_count) : prev;
       cur.value = val === null ? '' : String(val);
@@ -415,11 +454,13 @@
     if (ok) flashTick(id);
   }
 
-  function toggleNote(id, kind) {
-    if (!REQUESTS[kind] || !findItem(id)) return;
+  function toggleNote(id, lineId, kind) {
+    const b = findBundle(id);
+    if (!REQUESTS[kind] || !b || !findLine(b, lineId)) return;
     const prevId = state.note ? state.note.id : null;
-    const same = state.note && String(state.note.id) === String(id) && state.note.kind === kind;
-    state.note = same ? null : { id, kind, text: '' };
+    const same = state.note && String(state.note.id) === String(id)
+      && String(state.note.line) === String(lineId) && state.note.kind === kind;
+    state.note = same ? null : { id, line: lineId, kind, text: '' };
     renderNote(prevId);
   }
 
@@ -432,22 +473,32 @@
   async function submitNote(btn) {
     const note = state.note;
     if (!note) return;
-    const it = findItem(note.id);
+    const b = findBundle(note.id);
+    const line = b && findLine(b, note.line);
     const r = REQUESTS[note.kind];
-    if (!it || !r) { closeNote(); return; }
-    const li = rowEl(note.id);
-    const input = li && li.querySelector('input[data-role="note"]');
+    if (!line || !r) { closeNote(); return; }
+    const input = noteInput();
     const text = input ? input.value.trim() : '';
     await UI.busy(btn, async () => {
       const res = await UI.api.post(r.path, {
-        item_code: it.item_code,
+        item_code: line.item_code,
         source: 'irregular',
         note: text || undefined,
       });
       if (res && res.created === false) UI.toast('이미 요청된 상품입니다 (요청 내용 추가됨)', 'info');
       else UI.toast(r.okMsg, 'ok');
-      if (state.note === note) closeNote();
-      applyItem(note.id, null, { open_requests: Object.assign({}, it.open_requests, { [r.key]: true }) });
+      if (state.note === note) state.note = null;
+      // 같은 상품이 다른 묶음에도 있으면 그 줄들도 '요청됨'으로 바꾼다.
+      for (const other of state.bundles) {
+        let touched = false;
+        for (const l of linesOf(other)) {
+          if (l.item_code !== line.item_code) continue;
+          l.open_requests = Object.assign({}, l.open_requests, { [r.key]: true });
+          touched = true;
+        }
+        if (touched) patchRow(other);
+      }
+      Shell.refreshBadges();
     });
   }
 
@@ -467,12 +518,13 @@
     const id = rowIdOf(btn);
     if (id === null) return;
     if (act === 'open-item') {
-      const it = findItem(id);
-      if (it) Shell.show('items', { code: it.item_code });
+      const b = findBundle(id);
+      const line = b && findLine(b, lineIdOf(btn));
+      if (line) Shell.show('items', { code: line.item_code });
     } else if (act === 'status') {
       setStatus(btn, id, btn.dataset.value);
     } else if (act === 'req') {
-      toggleNote(id, btn.dataset.kind);
+      toggleNote(id, lineIdOf(btn), btn.dataset.kind);
     } else if (act === 'note-submit') {
       submitNote(btn);
     } else if (act === 'note-cancel') {
@@ -491,16 +543,16 @@
     if (input.matches('input[data-role="box"]')) {
       if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
       else if (ev.key === 'Escape') {
-        const it = findItem(rowIdOf(input));
-        const prev = it ? toInt(it.expected_box_count) : null;
+        const b = findBundle(rowIdOf(input));
+        const prev = b ? toInt(b.expected_box_count) : null;
         input.value = prev === null ? '' : String(prev);
         input.blur();
       }
     } else if (input.matches('input[data-role="note"]')) {
       if (ev.key === 'Enter') {
         ev.preventDefault();
-        const li = input.closest('.wl-row');
-        submitNote(li && li.querySelector('[data-act="note-submit"]'));
+        const line = input.closest('.irr-line');
+        submitNote(line && line.querySelector('[data-act="note-submit"]'));
       } else if (ev.key === 'Escape') {
         closeNote();
       }
