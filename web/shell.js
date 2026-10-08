@@ -3,19 +3,19 @@
 (function () {
   'use strict';
 
-  // 탭바 순서.
+  // 탭바 순서: 자주 쓰는 순(직원 → 매니저 → 관리자). 휴대폰에서는 앞의 4~5칸이 먼저 보인다.
   const TABS = [
-    { id: 'map', label: '창고맵' },
     { id: 'items', label: '상품조회' },
-    { id: 'newinbound', label: '신규입고' },
+    { id: 'irregular', label: '이형포장' },
     { id: 'stockcheck', label: '재고확인' },
     { id: 'display', label: '진열보충' },
-    { id: 'irregular', label: '이형포장' },
+    { id: 'newinbound', label: '신규입고' },
+    { id: 'map', label: '창고맵' },
     { id: 'soldout', label: '품절관리' },
     { id: 'logs', label: '작업로그' },
   ];
   const VIEW_IDS = TABS.map(t => t.id);
-  const DEFAULT_ID = 'map';
+  const DEFAULT_ID = 'items';   // 주소에 화면 지정이 없을 때 여는 첫 화면
 
   const state = {
     started: false,
@@ -264,6 +264,15 @@
     })();
     return state.badgePromise;
   }
+
+  // 첫 화면이 창고맵이 아니면, app.js 준비가 끝나기 전에 창고맵이 잠깐 비치지 않도록 미리 가려 둔다.
+  (function hideOtherViewsEarly() {
+    const first = parseHash(location.hash).id;
+    for (const viewId of VIEW_IDS) {
+      const el = viewEl(viewId);
+      if (el) el.hidden = viewId !== first;
+    }
+  })();
 
   window.Shell = {
     register,
