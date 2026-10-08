@@ -40,10 +40,6 @@
   function isYmd(value) {
     return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
   }
-  function shiftYmd(ymd, days) {
-    const [y, m, d] = ymd.split('-').map(Number);
-    return localYmd(new Date(y, m - 1, d + days));
-  }
 
   /* ---------- toast ---------- */
   let toastHost = null;
@@ -149,30 +145,32 @@
     let current = isYmd(value) ? value : today();
     const wrap = document.createElement('div');
     wrap.className = 'date-bar';
+    // 탭 제목 오른쪽에 들어가는 작은 날짜칸. '오늘' 버튼은 다른 날짜를 보고 있을 때만 나온다.
     wrap.innerHTML = `
-      <button type="button" class="btn-sm date-bar__nav" data-act="prev" aria-label="이전 날짜">◀</button>
-      <input type="date" class="date-bar__input" aria-label="날짜" />
-      <button type="button" class="btn-sm date-bar__nav" data-act="next" aria-label="다음 날짜">▶</button>
-      <button type="button" class="btn-sm" data-act="today">오늘</button>`;
+      <button type="button" class="btn-sm date-bar__today" data-act="today" hidden>오늘</button>
+      <input type="date" class="date-bar__input" aria-label="날짜" />`;
     const input = wrap.querySelector('input');
-    input.value = current;
+    const todayBtn = wrap.querySelector('[data-act="today"]');
+    const sync = () => {
+      input.value = current;
+      todayBtn.hidden = current === today();
+    };
+    sync();
 
     const commit = next => {
-      if (!isYmd(next)) { input.value = current; return; }
+      if (!isYmd(next)) { sync(); return; }
       const changed = next !== current;
       current = next;
-      input.value = current;
+      sync();
       if (changed && typeof onChange === 'function') onChange(current);
     };
     input.addEventListener('change', () => commit(input.value));
-    wrap.querySelector('[data-act="prev"]').addEventListener('click', () => commit(shiftYmd(current, -1)));
-    wrap.querySelector('[data-act="next"]').addEventListener('click', () => commit(shiftYmd(current, 1)));
-    wrap.querySelector('[data-act="today"]').addEventListener('click', () => commit(today()));
+    todayBtn.addEventListener('click', () => commit(today()));
 
     if (container) container.append(wrap);
     return {
       get: () => current,
-      set: ymd => { if (isYmd(ymd)) { current = ymd; input.value = ymd; } },
+      set: ymd => { if (isYmd(ymd)) { current = ymd; sync(); } },
     };
   }
 

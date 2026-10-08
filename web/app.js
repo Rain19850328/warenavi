@@ -1540,9 +1540,10 @@ function ensureNewInboundDialog(){
     dlg.id = 'dlgNewInbound';
     dlg.className = 'new-inbound-view';
     dlg.innerHTML = `
-        <div class="view-head"><h2>신규입고</h2></div>
+        <div class="view-head"><h2>신규입고</h2>
+          <label class="new-inbound-date-field">날짜 <input id="newInboundDate" type="date" aria-label="날짜" /></label>
+        </div>
         <div class="view-toolbar new-inbound-toolbar">
-          <label class="new-inbound-date-field">날짜 <input id="newInboundDate" type="date" /></label>
           <button id="newInboundImport" type="button" class="btn-sm">불러오기</button>
           <button id="newInboundReset" type="button" class="btn-sm">초기화</button>
           <input id="newInboundFile" type="file" accept=".xlsx,.xlsm,.xltx,.xltm" hidden />

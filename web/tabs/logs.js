@@ -218,7 +218,8 @@
   border:0; border-radius:8px; background:transparent; color:#64748b; font-size:15px; cursor:pointer;
 }
 .tab-logs .lg-clear[hidden]{ display:none; }
-.tab-logs .lg-range input[type="date"]{ flex:1 1 120px; padding:0 6px; }
+.tab-logs .lg-range input[type="date"]{ flex:1 1 120px; height:34px; padding:0 6px; }
+.tab-logs .lg-range .seg > button{ min-height:34px; }
 .tab-logs .lg-range .lg-tilde{ flex:0 0 auto; color:#64748b; }
 .tab-logs .lg-cats{ margin-bottom:10px; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
 .tab-logs .lg-cats::-webkit-scrollbar{ display:none; }
