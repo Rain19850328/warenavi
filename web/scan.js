@@ -92,16 +92,113 @@
     return { media_type: 'image/jpeg', image_base64: dataUrl.slice(comma + 1), width: canvas.width, height: canvas.height };
   }
 
-  // 촬영 → 축소 → 서버 인식. 결과 {candidates, raw}, 취소했거나 실패하면 undefined(실패는 토스트로 알린다).
+  // 촬영 → 축소 → 서버 인식. 결과 {candidates, raw}, 취소했거나 실패하면 undefined(실패는 화면에 알린다).
   async function recognize(button) {
     const file = await api.pick();
     if (!file) return undefined;
     return UI.busy(button, async () => {
-      const image = await api.shrink(file);
-      return UI.api.post('/scan_code', { image_base64: image.image_base64, media_type: image.media_type });
+      try {
+        const image = await api.shrink(file);
+        return await UI.api.post('/scan_code', { image_base64: image.image_base64, media_type: image.media_type });
+      } catch (err) {
+        if (!err || err.code !== 'AUTH_REQUIRED') notify(button, (err && err.message) || '사진을 읽지 못했습니다.');
+        return undefined;
+      }
     });
   }
 
-  const api = { pick, shrink, recognize };
+  // 팝업 창(모달) 안에서는 토스트가 창 뒤에 가려지므로 알림창으로 알린다.
+  function notify(button, message) {
+    if (button && button.closest && button.closest('dialog[open]')) window.alert(message);
+    else UI.toast(message, 'error');
+  }
+
+  /* ---------- 읽은 코드를 검색칸에 넣기 (어느 화면에서나 공용) ---------- */
+  let chooser = null;
+
+  // 코드가 여러 개 읽혔을 때 하나를 고르게 한다. 취소하면 null.
+  function choose(candidates) {
+    if (!chooser || !chooser.isConnected) {
+      chooser = document.createElement('dialog');
+      chooser.className = 'scan-choose';
+      document.body.append(chooser);
+    }
+    if (typeof chooser.showModal !== 'function') return Promise.resolve(candidates[0] || null);
+    chooser.innerHTML = `
+      <form method="dialog" class="dialog">
+        <h3>사진에서 읽은 코드</h3>
+        <div class="scan-choose__list">
+          ${candidates.map((c, i) => `<button type="submit" value="${i}">${c.kind === 'rack' ? '랙 ' : ''}${UI.esc(c.text)}${
+            c.kind !== 'rack' && Array.isArray(c.matches) && c.matches.length === 1 && c.matches[0].name
+              ? `<small>${UI.esc(c.matches[0].name)}</small>` : ''}</button>`).join('')}
+        </div>
+        <div class="row"><span></span><button type="submit" value="">취소</button></div>
+      </form>`;
+    return new Promise(resolve => {
+      const form = chooser.querySelector('form');
+      let settled = false;
+      const finish = value => {
+        if (settled) return;
+        settled = true;
+        if (chooser.open) chooser.close();
+        resolve(value);
+      };
+      // 누른 버튼의 value가 고른 순번이다(취소는 빈 값).
+      form.addEventListener('submit', ev => {
+        ev.preventDefault();
+        const idx = ev.submitter ? ev.submitter.value : '';
+        finish(idx === '' ? null : (candidates[Number(idx)] || null));
+      });
+      chooser.addEventListener('close', () => finish(null), { once: true });   // Esc 등으로 닫힌 경우
+      chooser.showModal();
+    });
+  }
+
+  // 검색칸에 넣을 글자: 상품이 하나로 정해졌으면 그 상품 코드, 아니면 읽은 글자 그대로.
+  function textOf(candidate) {
+    const matches = Array.isArray(candidate.matches) ? candidate.matches : [];
+    return candidate.kind !== 'rack' && matches.length === 1 && matches[0].code ? matches[0].code : candidate.text;
+  }
+
+  // 촬영 → 인식 → (여러 개면 선택) → input에 넣고 input 이벤트를 낸다. 넣은 글자를 돌려준다(없으면 '').
+  async function fill(button, input) {
+    if (!input) return '';
+    const res = await api.recognize(button);
+    if (!res) return '';
+    const candidates = Array.isArray(res.candidates) ? res.candidates.filter(c => c && c.text) : [];
+    if (!candidates.length) {
+      const raw = Array.isArray(res.raw) ? res.raw.filter(Boolean).slice(0, 4).join(', ') : '';
+      notify(button, `코드를 찾지 못했습니다. 라벨을 가까이서 다시 찍어주세요${raw ? ` (읽은 글자: ${raw})` : ''}`);
+      return '';
+    }
+    const picked = candidates.length === 1 ? candidates[0] : await api.choose(candidates);
+    if (!picked) return '';
+    const text = textOf(picked);
+    input.value = text;
+    // 입력 이벤트로 목록 필터·지우기 버튼 등을 갱신한다. 자동완성이 뒤늦게 열리는 칸은 data-scan-quiet 로 끈다.
+    if (!button || button.dataset.scanQuiet === undefined) input.dispatchEvent(new Event('input', { bubbles: true }));
+    return text;
+  }
+
+  // 마크업만으로 연결: <button data-scan-for="#입력칸" data-scan-then="submit | #누를버튼">
+  document.addEventListener('click', async ev => {
+    const button = ev.target.closest && ev.target.closest('[data-scan-for]');
+    if (!button) return;
+    ev.preventDefault();
+    const scope = button.closest('form, dialog, header, .view') || document;
+    const find = sel => (sel ? scope.querySelector(sel) || document.querySelector(sel) : null);
+    const input = find(button.dataset.scanFor);
+    const text = await fill(button, input);
+    if (!text) return;
+    const then = button.dataset.scanThen;
+    if (then === 'submit') {
+      if (input.form && typeof input.form.requestSubmit === 'function') input.form.requestSubmit();
+    } else if (then) {
+      const target = find(then);
+      if (target) target.click();
+    }
+  });
+
+  const api = { pick, shrink, recognize, choose, fill };
   window.Scan = api;
 })();

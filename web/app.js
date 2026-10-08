@@ -54,6 +54,7 @@ function ensureInboundDialog() {
         <h3 id="dlgTitle">입고</h3>
         <div class="row search-row">
           <input id="dlgQuery" type="text" placeholder="SKU/상품명/위치코드" />
+          <button type="button" class="icon-btn" data-scan-for="#dlgQuery" data-scan-then="#dlgBtnSearch" title="사진으로 코드 읽기" aria-label="사진으로 코드 읽기">📷</button>
           <button id="dlgBtnSearch" type="button">검색</button>
           <button id="dlgBtnReset" type="button" class="icon-btn" aria-label="검색 초기화" title="검색 초기화">${REFRESH_ICON_SVG}</button>
         </div>

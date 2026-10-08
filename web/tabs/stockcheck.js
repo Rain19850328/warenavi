@@ -600,6 +600,7 @@
         ${segHtml('kind', 'f-kind', KIND_OPTS)}
         <button type="button" class="btn-sm sc-toggle" data-act="toggle-disc" aria-pressed="false">단종 제외</button>
         <input type="search" class="sc-q" placeholder="코드 · 상품명 · 위치" aria-label="목록 내 검색" autocomplete="off" />
+        <button type="button" class="btn-sm" data-scan-for=".sc-q" title="사진으로 코드 읽기" aria-label="사진으로 코드 읽기">📷</button>
       </div>
       <div class="view-body"></div>`;
     state.bodyEl = root.querySelector('.view-body');

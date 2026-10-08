@@ -562,6 +562,7 @@
                  placeholder="SKU코드 · 상품명 · 로케이션코드" aria-label="작업로그 검색" />
           <button type="button" class="lg-clear" data-act="clear" aria-label="검색어 지우기" hidden>✕</button>
         </div>
+        <button type="button" class="btn-sm" data-scan-for='[data-role="q"]' data-scan-then="submit" title="사진으로 코드 읽기" aria-label="사진으로 코드 읽기">📷</button>
         <button type="submit" class="btn-primary">검색</button>
       </form>
       <div class="view-toolbar lg-range">

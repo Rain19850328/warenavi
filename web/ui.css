@@ -315,3 +315,14 @@ dialog.ui-confirm .ui-confirm__actions button{ min-height: 44px; font-size: 15px
 }
 #view-newinbound .new-inbound-actions button{ flex: 1 1 0; min-height: 48px; font-size: 16px; }
 
+/* ---------- 사진으로 코드 읽기 (scan.js) ---------- */
+[data-scan-for]{ flex: 0 0 auto; min-width: 40px; padding: 0 8px; font-size: 17px; line-height: 1; }
+dialog.scan-choose{ width: min(360px, calc(100vw - 32px)); }
+.scan-choose__list{ display: grid; gap: 8px; padding: 12px 16px; max-height: 50vh; overflow: auto; }
+.scan-choose__list button{
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px;
+  height: auto; min-height: 44px; padding: 6px 12px;
+  font-size: 16px; text-align: left; word-break: break-all;
+}
+.scan-choose__list button small{ font-size: 12px; font-weight: 500; color: #64748b; }
+
