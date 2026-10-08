@@ -27,6 +27,7 @@ jobs:
       SUPABASE_PROJECT_ID: ${{ vars.SUPABASE_PROJECT_ID || secrets.SUPABASE_PROJECT_ID || vars.SUPABASE_PROJECT_REF || secrets.SUPABASE_PROJECT_REF }}
       SUPABASE_PROJECT_URL: ${{ vars.SUPABASE_PROJECT_URL || secrets.SUPABASE_PROJECT_URL }}
       PUBLIC_SITE_ORIGIN: ${{ vars.PUBLIC_SITE_ORIGIN || secrets.PUBLIC_SITE_ORIGIN }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,6 +60,12 @@ jobs:
             supabase secrets set ALLOWED_ORIGIN="$PUBLIC_SITE_ORIGIN" --project-ref "${{ steps.validate.outputs.project_id }}"
           else
             echo "PUBLIC_SITE_ORIGIN is empty. Skipping ALLOWED_ORIGIN secret sync."
+          fi
+          # 사진 검색(/scan_code)용 키. 등록돼 있지 않으면 그 기능만 "설정되지 않았습니다"로 응답한다.
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            supabase secrets set ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" --project-ref "${{ steps.validate.outputs.project_id }}"
+          else
+            echo "ANTHROPIC_API_KEY is empty. Skipping photo search secret sync."
           fi
 
       - name: Deploy Edge Function

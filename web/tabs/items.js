@@ -49,6 +49,7 @@
     options: null,       // /item_options 응답
     optionsPromise: null,
     shownOnce: false,
+    scan: null,          // 사진에서 읽은 코드 후보가 여러 개일 때 [{text, kind, matches}]
   };
 
   /* ---------- helpers ---------- */
@@ -111,6 +112,11 @@
 .tab-items .ti-search{ flex-wrap: nowrap; }
 .tab-items .ti-search input{ flex: 1 1 auto; height: 40px; }
 .tab-items .ti-search button{ flex: 0 0 auto; min-height: 40px; }
+.tab-items .ti-search .ti-scan-btn{ min-width: 44px; padding: 0 10px; font-size: 18px; }
+.tab-items .ti-scan{ display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc; }
+.tab-items .ti-scan__label{ flex: 1 0 100%; font-size: 12px; font-weight: 600; color: #475569; }
+.tab-items .ti-scan .btn-sm{ max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.tab-items .ti-scan .ti-scan__close{ margin-left: auto; }
 .tab-items .ti-count{ margin: 0 0 8px; font-size: 12px; color: #64748b; }
 .tab-items .ti-row{ cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .tab-items .ti-row:hover{ background: #f8fafc; }
@@ -225,6 +231,73 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
 
   function cancelTimer() {
     if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+  }
+
+  /* ---------- photo scan ---------- */
+  function renderScan() {
+    const box = $('.ti-scan');
+    if (!box) return;
+    const list = state.scan || [];
+    box.hidden = !list.length;
+    box.innerHTML = list.length
+      ? `<span class="ti-scan__label">사진에서 읽은 코드 — 찾을 코드를 고르세요</span>
+         ${list.map((c, i) => `<button type="button" class="btn-sm" data-act="scan-pick" data-idx="${i}">${c.kind === 'rack' ? '랙 ' : ''}${esc(c.text)}</button>`).join('')}
+         <button type="button" class="btn-sm btn-ghost ti-scan__close" data-act="scan-close" aria-label="닫기">닫기</button>`
+      : '';
+  }
+
+  function clearScan() {
+    if (!state.scan) return;
+    state.scan = null;
+    renderScan();
+  }
+
+  // 읽은 코드 하나를 실제 화면에 반영한다.
+  async function applyScan(c) {
+    if (!c) return;
+    if (c.kind === 'rack') {
+      // 랙 코드는 창고맵 검색으로 넘긴다.
+      if (Shell.show('map') === false) return;
+      const input = document.querySelector('#search');
+      const button = document.querySelector('#btnSearch');
+      if (input) input.value = c.text;
+      if (button) button.click();
+      return;
+    }
+    const matches = Array.isArray(c.matches) ? c.matches : [];
+    const input = $('#tiQuery');
+    if (matches.length === 1 && matches[0].code) {
+      if (input) input.value = matches[0].code;
+      runSearch(matches[0].code);
+      await openCode(matches[0].code);
+      return;
+    }
+    if (input) input.value = c.text;
+    setPane('list');
+    await runSearch(c.text);
+  }
+
+  async function scanPhoto(button) {
+    if (!window.Scan) { UI.toast('사진 검색을 불러오지 못했습니다. 새로고침해 주세요.', 'error'); return; }
+    const res = await window.Scan.recognize(button);
+    if (!res) return;                       // 취소했거나 실패(실패는 이미 안내됨)
+    const candidates = Array.isArray(res.candidates) ? res.candidates.filter(c => c && c.text) : [];
+    if (!candidates.length) {
+      state.scan = null;
+      renderScan();
+      const raw = Array.isArray(res.raw) ? res.raw.filter(Boolean).slice(0, 4).join(', ') : '';
+      UI.toast(`코드를 찾지 못했습니다. 라벨을 가까이서 다시 찍어주세요${raw ? ` (읽은 글자: ${raw})` : ''}`, 'error');
+      return;
+    }
+    if (candidates.length === 1) {
+      state.scan = null;
+      renderScan();
+      await applyScan(candidates[0]);
+      return;
+    }
+    state.scan = candidates;
+    renderScan();
+    UI.toast(`코드 ${candidates.length}개를 읽었습니다. 찾을 코드를 골라 주세요`, 'info');
   }
 
   async function runSearch(rawQuery) {
@@ -720,6 +793,9 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       else if (act === 'req-display') openNote('display');
       else if (act === 'note-cancel') { state.noteFor = null; renderDetail(); }
       else if (act === 'logs') { if (state.code) Shell.show('logs', { q: state.code }); }
+      else if (act === 'scan') scanPhoto(actEl);
+      else if (act === 'scan-pick') applyScan((state.scan || [])[Number(actEl.dataset.idx)]);
+      else if (act === 'scan-close') clearScan();
       return;
     }
     const row = ev.target.closest('.ti-row');
@@ -780,8 +856,10 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       <form class="view-toolbar ti-search" data-form="search" role="search" novalidate>
         <input id="tiQuery" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false"
                placeholder="SKU코드 · 로케이션 · 상품명" aria-label="상품 검색" />
+        <button type="button" class="btn-sm ti-scan-btn" data-act="scan" title="사진으로 코드 읽기" aria-label="사진으로 코드 읽기">📷</button>
         <button type="submit" class="btn-primary" data-act="search">검색</button>
       </form>
+      <div class="ti-scan" hidden></div>
       <div class="view-body ti-layout">
         <div class="ti-list-pane"></div>
         <div class="ti-detail-pane"></div>

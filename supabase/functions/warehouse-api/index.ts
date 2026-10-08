@@ -97,6 +97,154 @@ async function callRpc(name: string, args: Record<string, unknown> = {}) {
   return data;
 }
 
+// ---- 사진 검색(/scan_code): 라벨 사진에서 코드 글자를 읽어 DB와 대조한다 ----
+const SCAN_MODEL = "claude-haiku-4-5-20251001";
+const SCAN_TIMEOUT_MS = 15000;
+const SCAN_MAX_BASE64_CHARS = 2_800_000; // 원본 약 2MB
+const SCAN_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const SCAN_MAX_CODES = 8;
+const SCAN_PROMPT = [
+  "이 사진은 창고의 상품 라벨 또는 선반(랙) 라벨입니다.",
+  "사진에 인쇄된 글자 중 '코드'로 보이는 것만 골라 주세요. 형식 예시는 다음과 같습니다.",
+  "- 랙 코드: SR1-05-02, SR2-A-03",
+  "- 로케이션 코드: D-02-02-01 (영문·숫자가 하이픈으로 이어진 형태)",
+  "- SKU 코드: 영문 1자 + 숫자 8자 (예: A00100301)",
+  "상품명, 가격, 날짜, 전화번호, 수량 같은 글자는 넣지 마세요.",
+  `보이는 그대로 대문자로 옮기고, 가장 또렷하고 크게 보이는 것부터 최대 ${SCAN_MAX_CODES}개까지만 넣으세요.`,
+  '설명 없이 JSON 문자열 배열 하나만 출력하세요. 예: ["A00100301","D-02-02-01"]. 코드가 없으면 [] 를 출력하세요.',
+].join("\n");
+
+function parseScanCodes(text: string): string[] {
+  const start = text.indexOf("[");
+  const end = text.lastIndexOf("]");
+  if (start < 0 || end <= start) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text.slice(start, end + 1));
+  } catch (_) {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const out: string[] = [];
+  for (const value of parsed) {
+    const code = String(value ?? "").replace(/\s+/g, "").toUpperCase();
+    // 코드에 쓰이는 글자만 허용(검색어로 그대로 쓰이므로 엄격하게 거른다)
+    if (!/^[A-Z0-9][A-Z0-9\-_.]{2,39}$/.test(code)) continue;
+    if (!out.includes(code)) out.push(code);
+    if (out.length >= SCAN_MAX_CODES) break;
+  }
+  return out;
+}
+
+async function readCodesFromImage(imageBase64: string, mediaType: string): Promise<string[]> {
+  const apiKey = (Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim();
+  if (!apiKey) throw new Error("사진 검색이 아직 설정되지 않았습니다.");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SCAN_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: SCAN_MODEL,
+        max_tokens: 300,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
+            { type: "text", text: SCAN_PROMPT },
+          ],
+        }],
+      }),
+    });
+  } catch (_) {
+    throw new Error("사진을 읽는 데 시간이 너무 오래 걸립니다. 다시 시도해 주세요.");
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    // 키·본문은 남기지 않고 상태만 기록한다.
+    console.error("scan_code: vision request failed", response.status);
+    throw new Error("사진을 읽지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
+
+  const data = await response.json().catch(() => null);
+  const blocks = Array.isArray(data?.content) ? data.content : [];
+  const text = blocks
+    .filter((block: { type?: string }) => block?.type === "text")
+    .map((block: { text?: string }) => String(block?.text ?? ""))
+    .join("\n");
+  return parseScanCodes(text);
+}
+
+type ScanMatch = { code: string; name: string; location_code: string };
+type ScanCandidate = { text: string; kind: "item" | "rack"; matches: ScanMatch[] };
+
+function isRackCodeText(text: string) {
+  return /^SR\d+-[A-Z0-9]+-[A-Z0-9]+$/.test(text);
+}
+
+async function matchScanCode(text: string): Promise<ScanCandidate | null> {
+  if (isRackCodeText(text)) {
+    // 랙 코드는 형식이 맞으면 후보로 인정한다(빈 랙도 창고맵에서 찾을 수 있어야 한다).
+    const data = await callRpc("warehouse_search_racks", { p_q: text, p_limit: 5 });
+    const rows = Array.isArray(data?.results) ? data.results : [];
+    return {
+      text,
+      kind: "rack",
+      matches: rows.map((row: Record<string, unknown>) => ({
+        code: String(row.sku ?? ""),
+        name: String(row.name ?? ""),
+        location_code: String(row.rack_code ?? ""),
+      })),
+    };
+  }
+
+  const data = await callRpc("warehouse_search_items", { p_q: text, p_limit: 20 });
+  const rows = Array.isArray(data?.items) ? data.items : [];
+  // 검색 함수는 상품명도 보므로, 코드나 로케이션에 그 글자가 들어 있는 상품만 남긴다.
+  const matches: ScanMatch[] = rows
+    .filter((row: Record<string, unknown>) =>
+      String(row.code ?? "").toUpperCase().includes(text) ||
+      String(row.location ?? "").toUpperCase().includes(text)
+    )
+    .slice(0, 5)
+    .map((row: Record<string, unknown>) => ({
+      code: String(row.code ?? ""),
+      name: String(row.name ?? ""),
+      location_code: String(row.location ?? ""),
+    }));
+  return matches.length ? { text, kind: "item", matches } : null;
+}
+
+// 헷갈리기 쉬운 글자(O↔0, I·L↔1)를 숫자로 바꾼 형태. 첫 글자(SKU의 영문)는 그대로 둔다.
+function scanLookalike(text: string) {
+  return text.slice(0, 1) + text.slice(1).replace(/O/g, "0").replace(/[IL]/g, "1");
+}
+
+async function matchScanCodes(codes: string[]): Promise<ScanCandidate[]> {
+  const found: ScanCandidate[] = [];
+  const push = (candidate: ScanCandidate | null) => {
+    if (candidate && !found.some((item) => item.text === candidate.text)) found.push(candidate);
+  };
+  for (const code of codes) push(await matchScanCode(code));
+  if (!found.length) {
+    for (const code of codes) {
+      const alt = scanLookalike(code);
+      if (alt !== code) push(await matchScanCode(alt));
+    }
+  }
+  return found;
+}
+
 function normalizeHeader(value: unknown) {
   return String(value ?? "").replace(/\s+/g, "").trim().toLowerCase();
 }
@@ -471,6 +619,23 @@ Deno.serve(async (req) => {
     // ---- 상품조회 ----
     if (req.method === "GET" && path === "/item_options") {
       return json(req, await callRpc("warehouse_get_item_options"));
+    }
+
+    if (req.method === "POST" && path === "/scan_code") {
+      const payload = await readBody(req);
+      const mediaType = String(payload.media_type ?? "").trim().toLowerCase();
+      const imageBase64 = String(payload.image_base64 ?? "").replace(/^data:[^,]*,/, "").trim();
+      if (!SCAN_MEDIA_TYPES.includes(mediaType)) {
+        throw new Error("지원하지 않는 사진 형식입니다. (JPEG, PNG, WebP)");
+      }
+      if (!imageBase64 || !/^[A-Za-z0-9+/]+={0,2}$/.test(imageBase64)) {
+        throw new Error("사진 데이터가 올바르지 않습니다.");
+      }
+      if (imageBase64.length > SCAN_MAX_BASE64_CHARS) {
+        throw new Error("사진이 너무 큽니다. 다시 찍어 주세요.");
+      }
+      const raw = await readCodesFromImage(imageBase64, mediaType);
+      return json(req, { candidates: await matchScanCodes(raw), raw });
     }
 
     if (req.method === "GET" && path === "/items_search") {
