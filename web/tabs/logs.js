@@ -95,8 +95,8 @@
     stock_check_resolve: d => ['재고확인', 'ok', 'stockcheck', joinParts(['처리완료', d.note])],
     stock_check_reopen: () => ['재고확인', 'warn', 'stockcheck', '처리 취소'],
     display_request: d => ['진열보충', 'info', 'display', joinParts(['진열 요청', d.note])],
-    display_done: () => ['진열보충', 'ok', 'display', '진열 완료'],
-    display_reopen: () => ['진열보충', 'warn', 'display', '완료 취소'],
+    display_done: d => ['진열보충', 'ok', 'display', joinParts(['진열 완료', d.rack_code ? `${text(d.rack_code)}에서 ${count(d.qty)}개 차감` : ''])],
+    display_reopen: d => ['진열보충', 'warn', 'display', joinParts(['완료 취소', d.rack_code ? `${text(d.rack_code)}에 ${count(d.qty)}개 되돌림` : ''])],
     irregular_import: d => {
       const skipped = Array.isArray(d.skipped) ? d.skipped.map(text).filter(Boolean) : [];
       let skippedText = '';

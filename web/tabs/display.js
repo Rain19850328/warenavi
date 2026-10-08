@@ -1,5 +1,6 @@
 // tabs/display.js — 진열보충 탭
-// 스토리지렉에서 꺼내 진열 위치를 채워 달라는 요청 목록. 완료 처리와 되돌리기.
+// 스토리지렉에서 꺼내 진열 위치를 채워 달라는 요청 목록.
+// 가져올 곳과 수량을 고르고 완료하면 그 위치 재고가 차감된다. 되돌리면 같은 위치에 다시 채운다.
 (function () {
   'use strict';
 
@@ -22,6 +23,29 @@
 .tab-display .dp-racks--empty{ background: #fffbeb; border-color: #fde68a; }
 .tab-display .dp-racks__label{ font-size: 12px; font-weight: 600; color: #475569; }
 .tab-display .dp-racks .chip{ padding: 4px 10px; font-size: 14px; }
+.tab-display .dp-rack{
+  appearance: none; min-height: 40px; padding: 0 12px; border-radius: 10px;
+  border: 1px solid #7dd3fc; background: #fff; color: #075985; cursor: pointer;
+  font: inherit; font-size: 14px; font-weight: 600;
+}
+.tab-display .dp-rack b{ margin-left: 4px; color: #0f172a; }
+.tab-display .dp-rack.is-active{ background: #0ea5e9; border-color: #0284c7; color: #fff; }
+.tab-display .dp-rack.is-active b{ color: #fff; }
+.tab-display .dp-take{
+  flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: #334155;
+}
+.tab-display .dp-take input{
+  width: 84px; height: 44px; padding: 0 8px; border: 1px solid #cbd5e1; border-radius: 10px;
+  background: #fff; color: #0f172a; font: inherit; font-size: 16px; text-align: right;
+}
+.tab-display .dp-take input:focus{ outline: none; border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56,189,248,.25); }
+.tab-display .dp-take .btn-sm{ min-height: 44px; }
+.tab-display .dp-hint{ flex: 1 0 100%; font-size: 12px; font-weight: 500; color: #64748b; }
+.tab-display .dp-taken{
+  margin-top: 6px; padding: 6px 8px; border-radius: 8px;
+  background: #ecfdf5; border: 1px solid #a7f3d0; font-size: 13px; font-weight: 600; color: #065f46;
+}
 .tab-display .dp-note{
   margin-top: 6px; padding: 6px 8px; border-radius: 8px;
   background: #f1f5f9; font-size: 13px; line-height: 1.4; color: #334155; word-break: break-word;
@@ -52,6 +76,7 @@
     seq: 0,
     filter: 'all',
     sticky: new Set(),        // 방금 처리한 행: 필터에 안 맞아도 제자리에 둔다
+    pick: new Map(),          // String(id) -> {rack, qty(입력 중인 글자)} : 고른 가져올 곳
   };
 
   const esc = v => UI.esc(v);
@@ -78,6 +103,19 @@
     return !s || s === '00' ? '위치 미지정' : s;
   }
   function hasRacks(r) { return Array.isArray(r.racks) && r.racks.some(x => x && x.rack_code); }
+  function rackList(r) { return Array.isArray(r.racks) ? r.racks.filter(x => x && x.rack_code) : []; }
+  function rackQty(r, code) {
+    const hit = rackList(r).find(x => String(x.rack_code) === String(code));
+    return hit ? (numOrNull(hit.qty) ?? 0) : 0;
+  }
+  // 목록이 새로 왔을 때 그 위치에 재고가 더 없으면 선택을 버린다.
+  function pickOf(r) {
+    const id = String(r.id);
+    const pick = state.pick.get(id);
+    if (!pick) return null;
+    if (r.status !== 'open' || rackQty(r, pick.rack) <= 0) { state.pick.delete(id); return null; }
+    return pick;
+  }
   function statusTone(s) {
     if (s === '안정') return 'ok';
     if (s === '주문필요') return 'warn';
@@ -138,9 +176,31 @@
     }
     if (r.stock_status) chips.push(UI.chip(r.stock_status, statusTone(r.stock_status)));
 
-    const racks = hasRacks(r)
-      ? `<div class="dp-racks"><span class="dp-racks__label">가져올 곳</span>${UI.rackChips(r.racks)}</div>`
-      : `<div class="dp-racks dp-racks--empty">${UI.chip('스토리지렉 재고 없음', 'warn')}</div>`;
+    const pick = done ? null : pickOf(r);
+    let racks;
+    if (!hasRacks(r)) {
+      racks = `<div class="dp-racks dp-racks--empty">${UI.chip('스토리지렉 재고 없음', 'warn')}</div>`;
+    } else if (done) {
+      racks = `<div class="dp-racks"><span class="dp-racks__label">스토리지렉</span>${UI.rackChips(r.racks)}</div>`;
+    } else {
+      const buttons = rackList(r).map(x => {
+        const on = !!pick && String(pick.rack) === String(x.rack_code);
+        return `<button type="button" class="dp-rack${on ? ' is-active' : ''}" data-act="pick-rack" data-rack="${esc(x.rack_code)}" aria-pressed="${on ? 'true' : 'false'}">${esc(x.rack_code)}<b>${esc(UI.num(x.qty))}개</b></button>`;
+      }).join('');
+      const take = pick
+        ? `<div class="dp-take">
+             <label for="dpQty-${esc(id)}">가져올 수량</label>
+             <input type="text" id="dpQty-${esc(id)}" data-role="take-qty" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" value="${esc(pick.qty)}" />
+             <span>/ ${esc(UI.num(rackQty(r, pick.rack)))}개</span>
+             <button type="button" class="btn-sm" data-act="take-all">전체</button>
+           </div>`
+        : '<span class="dp-hint">가져올 곳을 누르고 수량을 넣으면 완료할 때 그 위치 재고가 차감됩니다.</span>';
+      racks = `<div class="dp-racks"><span class="dp-racks__label">가져올 곳</span>${buttons}${take}</div>`;
+    }
+    const takenQty = numOrNull(r.taken_qty);
+    const taken = done && r.taken_rack_code && takenQty
+      ? `<div class="dp-taken">가져온 곳 ${esc(r.taken_rack_code)} · ${esc(UI.num(takenQty))}개 차감</div>`
+      : '';
 
     const who = [r.requested_by_name, UI.fmtDateTime(r.created_at)].filter(Boolean).join(' · ');
 
@@ -154,7 +214,7 @@
 
     const actions = (done
       ? '<button type="button" class="btn-ghost btn-sm" data-act="reopen">되돌리기</button>'
-      : '<button type="button" class="btn-primary dp-act-main" data-act="done">완료</button>') + soldoutHtml(r);
+      : `<button type="button" class="btn-primary dp-act-main" data-act="done">${pick ? '완료 · 재고 차감' : '완료'}</button>`) + soldoutHtml(r);
 
     return `
       <li class="wl-row${done ? ' is-done' : ''}" data-id="${esc(id)}">
@@ -163,6 +223,7 @@
           <div class="wl-name">${esc(r.item_name)}</div>
           <div class="wl-meta"><span>진열 위치 <span class="dp-loc">${esc(locText(r.location_code))}</span></span><span>재고 <b>${esc(UI.num(r.stock_today))}</b></span></div>
           ${racks}
+          ${taken}
           ${chips.length ? `<div class="wl-meta">${chips.join('')}</div>` : ''}
           ${r.request_note ? `<div class="dp-note">요청 메모: ${esc(r.request_note)}</div>` : ''}
           ${who ? `<div class="wl-meta">요청: ${esc(who)}</div>` : ''}
@@ -215,6 +276,7 @@
     const date = state.date;
     const seq = ++state.seq;
     state.sticky.clear();
+    if (state.loadedDate !== date) state.pick.clear();
     // 같은 날짜를 다시 불러올 때는 화면을 비우지 않는다(스크롤 유지)
     if (!(state.phase === 'ready' && state.loadedDate === date)) {
       state.phase = 'loading';
@@ -256,10 +318,72 @@
     Shell.refreshBadges();
   }
 
-  async function setStatus(btn, r, status) {
-    const res = await UI.busy(btn, () => UI.api.post('/display_requests/status', { id: r.id, status }));
-    if (res === undefined) return;
+  // 스토리지렉 재고가 바뀌었으면 창고맵도 최신으로 맞춘다(실패해도 이 탭에는 영향 없음).
+  function refreshMap() {
+    try {
+      if (typeof loadCells === 'function') Promise.resolve(loadCells()).catch(() => {});
+      if (typeof loadMovements === 'function') Promise.resolve(loadMovements()).catch(() => {});
+    } catch (_) {}
+  }
+
+  async function setStatus(btn, r, status, extra) {
+    const body = Object.assign({ id: r.id, status }, extra || {});
+    const res = await UI.busy(btn, () => UI.api.post('/display_requests/status', body));
+    if (res === undefined) return false;
+    state.pick.delete(String(r.id));
     applyItem(res && res.item);
+    return true;
+  }
+
+  async function completeRow(btn, r) {
+    const pick = pickOf(r);
+    if (!pick) {
+      if (hasRacks(r) && !(await UI.confirm(
+        `${r.item_code}\n가져올 곳을 고르지 않았습니다.\n스토리지렉 재고를 차감하지 않고 완료할까요?`))) return;
+      await setStatus(btn, r, 'done');
+      return;
+    }
+    const max = rackQty(r, pick.rack);
+    const raw = String(pick.qty ?? '').trim();
+    if (!/^\d{1,6}$/.test(raw) || Number(raw) < 1) {
+      UI.toast('가져올 수량을 1 이상의 숫자로 입력해 주세요', 'error');
+      focusQty(r.id);
+      return;
+    }
+    const qty = Number(raw);
+    if (qty > max) {
+      UI.toast(`${pick.rack} 위치에는 ${UI.num(max)}개만 있습니다`, 'error');
+      focusQty(r.id);
+      return;
+    }
+    const rack = pick.rack;
+    if (await setStatus(btn, r, 'done', { rack_code: rack, qty })) {
+      UI.toast(`완료 · ${rack}에서 ${UI.num(qty)}개 차감했습니다`, 'ok');
+      refreshMap();
+    }
+  }
+
+  async function reopenRow(btn, r) {
+    const qty = numOrNull(r.taken_qty);
+    const restore = !!(r.taken_rack_code && qty);
+    if (restore && !(await UI.confirm(
+      `${r.item_code}\n차감했던 ${UI.num(qty)}개를 ${r.taken_rack_code}에 되돌리고 미완료로 바꿀까요?`))) return;
+    if (await setStatus(btn, r, 'open') && restore) {
+      UI.toast(`${r.taken_rack_code}에 ${UI.num(qty)}개를 되돌렸습니다`, 'info');
+      refreshMap();
+    }
+  }
+
+  function rowLi(id) {
+    for (const li of state.bodyEl.querySelectorAll('li.wl-row')) {
+      if (li.dataset.id === String(id)) return li;
+    }
+    return null;
+  }
+  function focusQty(id) {
+    const li = rowLi(id);
+    const input = li && li.querySelector('input[data-role="take-qty"]');
+    if (input) { try { input.focus({ preventScroll: true }); input.select(); } catch (_) {} }
   }
 
   /* ---------- events ---------- */
@@ -284,8 +408,25 @@
     if (!r) return;
 
     if (act === 'open-item') { Shell.show('items', { code: r.item_code }); return; }
-    if (act === 'done') { await setStatus(btn, r, 'done'); return; }
-    if (act === 'reopen') { await setStatus(btn, r, 'open'); return; }
+    if (act === 'pick-rack') {
+      const rack = btn.dataset.rack;
+      const cur = state.pick.get(id);
+      if (cur && String(cur.rack) === String(rack)) state.pick.delete(id);
+      else state.pick.set(id, { rack, qty: '' });
+      replaceRow(id);
+      if (state.pick.has(id)) focusQty(id);
+      return;
+    }
+    if (act === 'take-all') {
+      const cur = pickOf(r);
+      if (!cur) return;
+      cur.qty = String(rackQty(r, cur.rack));
+      const input = li.querySelector('input[data-role="take-qty"]');
+      if (input) input.value = cur.qty;
+      return;
+    }
+    if (act === 'done') { await completeRow(btn, r); return; }
+    if (act === 'reopen') { await reopenRow(btn, r); return; }
     if (act === 'soldout') {
       const res = await UI.busy(btn, () => UI.api.post('/soldout_items/add', {
         item_code: r.item_code, source: 'display', source_id: r.id, date: r.request_date,
@@ -297,6 +438,23 @@
       if (cur) { cur.in_soldout = true; replaceRow(id); }
       Shell.refreshBadges();
     }
+  }
+
+  function onInput(ev) {
+    const input = ev.target;
+    if (!input || !input.matches || !input.matches('input[data-role="take-qty"]')) return;
+    const li = input.closest('li.wl-row');
+    const pick = li && state.pick.get(li.dataset.id);
+    if (pick) pick.qty = input.value;
+  }
+
+  function onKeyDown(ev) {
+    const input = ev.target;
+    if (ev.key !== 'Enter' || ev.isComposing || !input || !input.matches || !input.matches('input[data-role="take-qty"]')) return;
+    ev.preventDefault();
+    const li = input.closest('li.wl-row');
+    const btn = li && li.querySelector('[data-act="done"]');
+    if (btn) btn.click();
   }
 
   /* ---------- lifecycle ---------- */
@@ -323,6 +481,8 @@
       onChange: ymd => { state.date = ymd; load(); },
     });
     root.addEventListener('click', onClick);
+    root.addEventListener('input', onInput);
+    root.addEventListener('keydown', onKeyDown);
     syncToolbar();
   }
 

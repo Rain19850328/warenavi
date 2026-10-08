@@ -622,6 +622,11 @@ Deno.serve(async (req) => {
 
     if (req.method === "POST" && path === "/display_requests/status") {
       const payload = await readBody(req);
+      const rackCode = String(payload.rack_code ?? "").trim();
+      const takeQty = Number(payload.qty);
+      if (rackCode && !(Number.isInteger(takeQty) && takeQty > 0)) {
+        throw new Error("가져올 수량을 1 이상의 정수로 입력하세요.");
+      }
       return json(
         req,
         await callRpc("warehouse_set_display_request_status", {
@@ -630,6 +635,9 @@ Deno.serve(async (req) => {
           p_actor_user_id: auth.userId,
           p_actor_email: auth.email,
           p_actor_name: auth.name,
+          // 가져온 스토리지렉 위치·수량(완료일 때만). 없으면 재고 차감 없이 완료.
+          p_rack_code: rackCode || null,
+          p_qty: rackCode ? takeQty : null,
         }),
       );
     }
