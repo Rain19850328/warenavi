@@ -1535,15 +1535,16 @@ async function resetNewInboundDate(){
 function ensureNewInboundDialog(){
   let dlg = document.getElementById('dlgNewInbound');
   if (!dlg) {
-    dlg = document.createElement('dialog');
+    // 팝업이 아니라 신규입고 탭 화면(#view-newinbound) 안에 그린다. id는 기존 코드와 맞추려고 그대로 둔다.
+    dlg = document.createElement('div');
     dlg.id = 'dlgNewInbound';
+    dlg.className = 'new-inbound-view';
     dlg.innerHTML = `
-      <form method="dialog" class="dialog new-inbound-dialog">
-        <h3>신규입고리스트</h3>
-        <div class="row new-inbound-toolbar">
+        <div class="view-head"><h2>신규입고</h2></div>
+        <div class="view-toolbar new-inbound-toolbar">
           <label class="new-inbound-date-field">날짜 <input id="newInboundDate" type="date" /></label>
-          <button id="newInboundImport" type="button">불러오기</button>
-          <button id="newInboundReset" type="button">초기화</button>
+          <button id="newInboundImport" type="button" class="btn-sm">불러오기</button>
+          <button id="newInboundReset" type="button" class="btn-sm">초기화</button>
           <input id="newInboundFile" type="file" accept=".xlsx,.xlsm,.xltx,.xltm" hidden />
           <div id="newInboundSource" class="muted"></div>
         </div>
@@ -1560,13 +1561,11 @@ function ensureNewInboundDialog(){
             <tbody></tbody>
           </table>
         </div>
-        <div class="row new-inbound-actions">
-          <button id="btnNewInboundDisplay" type="button">진열</button>
-          <button id="btnNewInboundInbound" type="button">입고</button>
-          <button id="btnNewInboundClose" type="button">닫기</button>
-        </div>
-      </form>`;
-    document.body.append(dlg);
+        <div class="new-inbound-actions">
+          <button id="btnNewInboundDisplay" type="button" class="btn-primary">진열</button>
+          <button id="btnNewInboundInbound" type="button" class="btn-primary">입고</button>
+        </div>`;
+    (document.getElementById('view-newinbound') || document.body).append(dlg);
   }
 
   if (!dlg.__bound) {
@@ -1643,7 +1642,11 @@ async function openNewInboundDialog(){
   const dateInput = dlg.querySelector('#newInboundDate');
   const targetDate = NEW_INBOUND.date || todayYmd();
   if (dateInput) dateInput.value = targetDate;
-  if (!dlg.open) openDialog(dlg);
+  // 다른 화면(창고맵에서 위치를 고른 뒤 등)에서 불렸으면 신규입고 탭으로 돌아간다. 탭이 열리면서 다시 호출된다.
+  if (window.Shell && window.Shell.current() !== 'newinbound') {
+    window.Shell.show('newinbound');
+    return;
+  }
   try {
     setDialogPending(dlg, true, '#newInboundImport', '불러오는 중...');
     await fetchNewInboundList(targetDate);
@@ -1755,6 +1758,8 @@ async function openNewInboundProcessDialog(mode, preserveDraft=false){
       NEW_INBOUND.picking = true;
       NEW_INBOUND.reopenAfterPick = true;
       closeDialog(dlg);
+      // 렉 칸을 고르려면 창고맵이 보여야 한다. 칸을 누르면 이 창이 다시 열린다.
+      if (window.Shell) window.Shell.show('map');
     };
   }
 

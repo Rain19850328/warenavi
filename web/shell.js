@@ -3,18 +3,18 @@
 (function () {
   'use strict';
 
-  // 탭바 순서. action 탭은 화면이 아니라 동작이다.
+  // 탭바 순서.
   const TABS = [
     { id: 'map', label: '창고맵' },
     { id: 'items', label: '상품조회' },
-    { id: 'newinbound', label: '신규입고', action: true },
+    { id: 'newinbound', label: '신규입고' },
     { id: 'stockcheck', label: '재고확인' },
     { id: 'display', label: '진열보충' },
     { id: 'irregular', label: '이형포장' },
     { id: 'soldout', label: '품절관리' },
     { id: 'logs', label: '작업로그' },
   ];
-  const VIEW_IDS = TABS.filter(t => !t.action).map(t => t.id);
+  const VIEW_IDS = TABS.map(t => t.id);
   const DEFAULT_ID = 'map';
 
   const state = {
@@ -127,7 +127,7 @@
     barEl.setAttribute('role', 'navigation');
     barEl.setAttribute('aria-label', '화면 이동');
     barEl.innerHTML = TABS.map(tab => `
-      <button type="button" class="tabbar__tab${tab.action ? ' tabbar__tab--action' : ''}" data-tab="${tab.id}">
+      <button type="button" class="tabbar__tab" data-tab="${tab.id}">
         <span class="tabbar__label">${tab.label}</span>
         <span class="tabbar__badge" hidden></span>
       </button>`).join('');
@@ -174,18 +174,7 @@
     refreshBadges();
   }
 
-  function runNewInbound() {
-    if (!show('map')) return;
-    try {
-      if (typeof openNewInboundDialog !== 'function') throw new Error('신규입고 화면을 불러오지 못했습니다.');
-      Promise.resolve(openNewInboundDialog()).catch(err => alert('신규입고리스트 오류: ' + (err.message || err)));
-    } catch (err) {
-      alert('신규입고리스트 오류: ' + (err.message || err));
-    }
-  }
-
   function show(id, params) {
-    if (id === 'newinbound') { runNewInbound(); return true; }
     if (!isView(id)) id = DEFAULT_ID;
 
     if (state.current === 'map' && id !== 'map' && isPicking()) {
