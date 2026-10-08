@@ -18,17 +18,18 @@
 .tab-display .dp-racks{
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   margin-top: 8px; padding: 8px; border-radius: 10px;
-  background: #f0f9ff; border: 1px solid #bae6fd;
+  background: #f8fafc; border: 1px solid #e2e8f0;
 }
 .tab-display .dp-racks--empty{ background: #fffbeb; border-color: #fde68a; }
 .tab-display .dp-racks__label{ font-size: 12px; font-weight: 600; color: #475569; }
 .tab-display .dp-racks .chip{ padding: 4px 10px; font-size: 14px; }
 .tab-display .dp-rack{
   appearance: none; min-height: 40px; padding: 0 12px; border-radius: 10px;
-  border: 1px solid #7dd3fc; background: #fff; color: #075985; cursor: pointer;
+  border: 1px solid #e2e8f0; background: #f8fafc; color: #0f172a; cursor: pointer;
+  box-shadow: 0 1px 1px rgba(0,0,0,.06);
   font: inherit; font-size: 14px; font-weight: 600;
 }
-.tab-display .dp-rack b{ margin-left: 4px; color: #0f172a; }
+.tab-display .dp-rack b{ margin-left: 4px; color: #0369a1; }
 .tab-display .dp-rack.is-active{ background: #0ea5e9; border-color: #0284c7; color: #fff; }
 .tab-display .dp-rack.is-active b{ color: #fff; }
 .tab-display .dp-take{
@@ -36,11 +37,11 @@
   font-size: 13px; font-weight: 600; color: #334155;
 }
 .tab-display .dp-take input{
-  width: 84px; height: 44px; padding: 0 8px; border: 1px solid #cbd5e1; border-radius: 10px;
+  width: 84px; height: 40px; padding: 0 8px; border: 1px solid #cbd5e1; border-radius: 10px;
   background: #fff; color: #0f172a; font: inherit; font-size: 16px; text-align: right;
 }
 .tab-display .dp-take input:focus{ outline: none; border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56,189,248,.25); }
-.tab-display .dp-take .btn-sm{ min-height: 44px; }
+.tab-display .dp-take .btn-sm{ min-height: 40px; }
 .tab-display .dp-hint{ flex: 1 0 100%; font-size: 12px; font-weight: 500; color: #64748b; }
 .tab-display .dp-taken{
   margin-top: 6px; padding: 6px 8px; border-radius: 8px;
@@ -51,7 +52,7 @@
   background: #f1f5f9; font-size: 13px; line-height: 1.4; color: #334155; word-break: break-word;
 }
 .tab-display .dp-side-sub{ font-size: 11px; color: #64748b; }
-.tab-display .wl-actions .dp-act-main{ flex: 1 1 120px; min-height: 44px; font-size: 15px; }
+.tab-display .wl-actions .dp-act-main{ flex: 1 1 120px; min-height: 40px; font-size: 15px; }
 .tab-display .dp-state{ display: grid; justify-items: center; gap: 4px; padding-bottom: 20px; }
 @media (min-width: 640px){
   .tab-display .dp-toolbar .seg{ flex: 0 1 auto; }

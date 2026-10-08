@@ -105,26 +105,28 @@ dialog :not(.suggest) > .empty{
   appearance: none;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: 40px; height: auto; padding: 0 14px;
-  border: 1px solid #cbd5e1; border-radius: 10px;
+  /* 창고맵의 .toolbar button / .detail-actions button 과 같은 서식 */
+  border: 1px solid #e2e8f0; border-radius: 10px;
   background: #f8fafc; color: #0f172a;
+  box-shadow: 0 1px 1px rgba(0,0,0,.06);
   font: inherit; font-size: 14px; font-weight: 600; line-height: 1.2;
   white-space: nowrap;
   cursor: pointer; user-select: none;
   -webkit-tap-highlight-color: transparent;
-  transition: filter .15s ease, background-color .15s ease, border-color .15s ease;
+  transition: filter .15s ease, transform .05s ease, background-color .15s ease, border-color .15s ease;
 }
 .btn-sm{ padding: 0 10px; font-size: 13px; }
 .btn-primary{ background: #0ea5e9; border-color: #0284c7; color: #fff; }
-.btn-ghost{ background: #fff; border-color: #cbd5e1; color: #0f172a; }
+.btn-ghost{ background: #fff; border-color: #e2e8f0; color: #0f172a; }
 .btn-danger{ background: #fef2f2; border-color: #fca5a5; color: #b91c1c; }
-.btn-sm:hover, .btn-primary:hover, .btn-ghost:hover, .btn-danger:hover{ filter: brightness(.97); }
-.btn-sm:active, .btn-primary:active, .btn-ghost:active, .btn-danger:active{ filter: brightness(.93); }
+.btn-sm:hover, .btn-primary:hover, .btn-ghost:hover, .btn-danger:hover{ filter: brightness(.98); }
+.btn-sm:active, .btn-primary:active, .btn-ghost:active, .btn-danger:active{ transform: translateY(1px); }
 .btn-sm:focus-visible, .btn-primary:focus-visible, .btn-ghost:focus-visible, .btn-danger:focus-visible,
 .seg > button:focus-visible, .tabbar__tab:focus-visible{
   outline: 2px solid #38bdf8; outline-offset: 2px;
 }
 .btn-sm:disabled, .btn-primary:disabled, .btn-ghost:disabled, .btn-danger:disabled{
-  opacity: .5; cursor: not-allowed; filter: none;
+  opacity: .5; cursor: not-allowed; filter: none; transform: none;
 }
 
 /* ---------- Forms ---------- */
@@ -157,15 +159,16 @@ dialog .field input[type="number"]{
 /* ---------- Segmented buttons ---------- */
 .seg{
   display: inline-flex; max-width: 100%;
-  border: 1px solid #cbd5e1; border-radius: 10px;
+  border: 1px solid #e2e8f0; border-radius: 10px;
   background: #fff; overflow: hidden;
+  box-shadow: 0 1px 1px rgba(0,0,0,.06);
 }
 .seg > button{
   appearance: none;
   flex: 1 1 auto;
   min-height: 40px; height: auto; padding: 0 12px;
-  border: 0; border-left: 1px solid #cbd5e1; border-radius: 0;
-  background: #fff; color: #334155;
+  border: 0; border-left: 1px solid #e2e8f0; border-radius: 0;
+  background: #f8fafc; color: #0f172a;
   font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;

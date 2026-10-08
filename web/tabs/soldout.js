@@ -72,13 +72,13 @@
 .tab-soldout .so-loc{ font-weight:700; color:#0f172a; }
 .tab-soldout .wl-row.is-done{ opacity:1; }
 .tab-soldout .wl-row.is-done .wl-main{ opacity:.55; }
-.tab-soldout .btn-sm, .tab-soldout .btn-primary, .tab-soldout .btn-ghost{ min-height:44px; }
-.tab-soldout .seg > button{ min-height:44px; }
+.tab-soldout .btn-sm, .tab-soldout .btn-primary, .tab-soldout .btn-ghost{ min-height:40px; }
+.tab-soldout .seg > button{ min-height:40px; }
 .tab-soldout .so-filter{ flex:1 1 260px; }
 .tab-soldout .so-control{ padding-top:8px; border-top:1px dashed #e2e8f0; }
 .tab-soldout .so-control-label{ flex:1 0 100%; font-size:12px; font-weight:600; color:#475569; }
 .tab-soldout .so-pick{ flex:1 1 200px; display:flex; gap:8px; min-width:0; }
-.tab-soldout .so-pick select{ flex:1 1 auto; min-width:0; height:44px; padding:0 8px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#0f172a; font:inherit; font-size:16px; }
+.tab-soldout .so-pick select{ flex:1 1 auto; min-width:0; height:40px; padding:0 8px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#0f172a; font:inherit; font-size:16px; }
 .tab-soldout .so-pick select:focus{ outline:none; border-color:#38bdf8; box-shadow:0 0 0 3px rgba(56,189,248,.25); }
 .tab-soldout .so-foot{ justify-content:flex-end; }
 .tab-soldout .so-remove{ min-height:36px; font-size:12px; font-weight:500; color:#64748b; }

@@ -109,8 +109,8 @@
     style.textContent = `
 .tab-items [hidden]{ display: none !important; }
 .tab-items .ti-search{ flex-wrap: nowrap; }
-.tab-items .ti-search input{ flex: 1 1 auto; height: 44px; }
-.tab-items .ti-search button{ flex: 0 0 auto; min-height: 44px; }
+.tab-items .ti-search input{ flex: 1 1 auto; height: 40px; }
+.tab-items .ti-search button{ flex: 0 0 auto; min-height: 40px; }
 .tab-items .ti-count{ margin: 0 0 8px; font-size: 12px; color: #64748b; }
 .tab-items .ti-row{ cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .tab-items .ti-row:hover{ background: #f8fafc; }
@@ -138,7 +138,7 @@
 .tab-items .ti-stock{ display: flex; flex-wrap: wrap; gap: 6px 20px; margin-bottom: 8px; font-size: 13px; color: #64748b; }
 .tab-items .ti-stock b{ margin-left: 4px; font-size: 18px; color: #0f172a; }
 .tab-items .ti-actions{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
-.tab-items .ti-actions button{ min-height: 46px; white-space: normal; }
+.tab-items .ti-actions button{ min-height: 40px; white-space: normal; }
 .tab-items .ti-actions .is-wide{ grid-column: 1 / -1; }
 .tab-items .ti-actions .is-requested{ background: #fef3c7; border-color: #fde68a; color: #92400e; }
 .tab-items .ti-note{
@@ -147,7 +147,7 @@
 }
 .tab-items .ti-note-title{ margin: 0 0 2px; font-size: 14px; font-weight: 700; color: #0f172a; }
 .tab-items .ti-note-btns, .tab-items .ti-edit-btns{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
-.tab-items .ti-note-btns button, .tab-items .ti-edit-btns button{ min-height: 46px; }
+.tab-items .ti-note-btns button, .tab-items .ti-edit-btns button{ min-height: 40px; }
 .tab-items .ti-edit-btns{
   position: sticky; bottom: calc(var(--footer-h, 56px) + 8px); z-index: 2;
   padding: 8px; margin-left: -8px; margin-right: -8px;

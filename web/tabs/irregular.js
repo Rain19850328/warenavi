@@ -124,8 +124,8 @@
 .tab-irregular .wl-row.is-done{ opacity:1; }
 .tab-irregular .wl-row{ display:block; }
 .tab-irregular .wl-row.is-done .irr-head, .tab-irregular .wl-row.is-done .irr-lines{ opacity:.55; }
-.tab-irregular .btn-sm, .tab-irregular .btn-primary, .tab-irregular .btn-ghost{ min-height:44px; }
-.tab-irregular .seg > button{ min-height:44px; }
+.tab-irregular .btn-sm, .tab-irregular .btn-primary, .tab-irregular .btn-ghost{ min-height:40px; }
+.tab-irregular .seg > button{ min-height:40px; }
 .tab-irregular .irr-filter{ flex:1 1 260px; }
 .tab-irregular .irr-status{ flex:1 1 220px; display:flex; }
 .tab-irregular .irr-status > button{ font-size:14px; }
@@ -133,7 +133,7 @@
 .tab-irregular .irr-status > button.is-active[data-value="작업중"]{ background:#d97706; }
 .tab-irregular .irr-status > button.is-active[data-value="포장완료"]{ background:#16a34a; }
 .tab-irregular .irr-box{ display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#334155; }
-.tab-irregular .irr-box input{ width:76px; height:44px; padding:0 8px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#0f172a; font:inherit; font-size:16px; text-align:right; }
+.tab-irregular .irr-box input{ width:76px; height:40px; padding:0 8px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#0f172a; font:inherit; font-size:16px; text-align:right; }
 .tab-irregular .irr-box input:focus{ outline:none; border-color:#38bdf8; box-shadow:0 0 0 3px rgba(56,189,248,.25); }
 .tab-irregular .irr-box input:disabled{ background:#f1f5f9; color:#64748b; }
 .tab-irregular .irr-tick{ width:14px; color:#16a34a; font-weight:700; opacity:0; transition:opacity .2s ease; }
@@ -142,7 +142,7 @@
 .tab-irregular .irr-note{ display:flex; margin-top:8px; flex-wrap:wrap; align-items:center; gap:8px; padding-top:8px; border-top:1px dashed #e2e8f0; }
 .tab-irregular .irr-note[hidden]{ display:none; }
 .tab-irregular .irr-note label{ flex:1 0 100%; font-size:12px; font-weight:600; color:#475569; }
-.tab-irregular .irr-note input{ flex:1 1 160px; min-width:0; height:44px; padding:0 10px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#0f172a; font:inherit; font-size:16px; }
+.tab-irregular .irr-note input{ flex:1 1 160px; min-width:0; height:40px; padding:0 10px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#0f172a; font:inherit; font-size:16px; }
 .tab-irregular .irr-note input:focus{ outline:none; border-color:#38bdf8; box-shadow:0 0 0 3px rgba(56,189,248,.25); }
 .tab-irregular .irr-error{ text-align:center; }
 `;

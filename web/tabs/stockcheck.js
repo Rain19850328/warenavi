@@ -10,7 +10,7 @@
 .tab-stockcheck .sc-toolbar .seg > button{ padding: 0 6px; }
 .tab-stockcheck .sc-cnt{ margin-left: 3px; font-weight: 500; opacity: .75; }
 .tab-stockcheck .sc-toggle[aria-pressed="true"]{ background: #0ea5e9; border-color: #0284c7; color: #fff; }
-.tab-stockcheck .sc-open-toggle{ flex: 1 1 100%; min-height: 44px; border-color: #fca5a5; background: #fff; color: #b91c1c; font-size: 14px; }
+.tab-stockcheck .sc-open-toggle{ flex: 1 1 100%; min-height: 40px; border-color: #e2e8f0; background: #fff; color: #b91c1c; font-size: 14px; }
 .tab-stockcheck .sc-open-toggle[aria-pressed="true"]{ background: #dc2626; border-color: #b91c1c; color: #fff; }
 .tab-stockcheck .sc-q{ flex: 1 1 160px; }
 .tab-stockcheck.is-open-mode .sc-datebar,
@@ -38,14 +38,14 @@
 .tab-stockcheck .sc-side-sub{ font-size: 11px; color: #64748b; }
 .tab-stockcheck .sc-diff--minus{ color: #b91c1c; }
 .tab-stockcheck .sc-diff--plus{ color: #1d4ed8; }
-.tab-stockcheck .wl-actions .sc-act-main{ flex: 1 1 96px; min-height: 44px; font-size: 15px; }
+.tab-stockcheck .wl-actions .sc-act-main{ flex: 1 1 96px; min-height: 40px; font-size: 15px; }
 .tab-stockcheck .sc-form{
   flex: 1 0 100%; min-width: 0; box-sizing: border-box;
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px;
   padding: 10px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc;
 }
 .tab-stockcheck .sc-form-actions{ display: flex; gap: 8px; }
-.tab-stockcheck .sc-form-actions button{ flex: 1 1 0; min-height: 44px; }
+.tab-stockcheck .sc-form-actions button{ flex: 1 1 0; min-height: 40px; }
 .tab-stockcheck .sc-state{ display: grid; justify-items: center; gap: 4px; padding-bottom: 20px; }
 @media (min-width: 640px){
   .tab-stockcheck .sc-toolbar .seg,
