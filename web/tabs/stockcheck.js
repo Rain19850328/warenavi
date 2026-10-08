@@ -620,6 +620,8 @@
       state.date = p.date;
       state.dateBar.set(p.date);
       if (state.openMode) { state.openMode = false; }
+    } else if (p.open === '1') {
+      state.openMode = true;     // 상품조회 첫 화면의 '불일치 미처리' 바로가기
     }
     syncToolbar();
     load();

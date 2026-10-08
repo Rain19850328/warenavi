@@ -117,6 +117,20 @@
 .tab-items .ti-scan__label{ flex: 1 0 100%; font-size: 12px; font-weight: 600; color: #475569; }
 .tab-items .ti-scan .btn-sm{ max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .tab-items .ti-scan .ti-scan__close{ margin-left: auto; }
+.tab-items .ti-home{ display: grid; gap: 16px; }
+.tab-items .ti-home__scan{ width: 100%; min-height: 56px; font-size: 17px; font-weight: 700; }
+.tab-items .ti-home__title{ display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; font-size: 13px; font-weight: 700; color: #334155; }
+.tab-items .ti-todo{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tab-items .ti-todo__card{
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0 8px;
+  min-height: 64px; padding: 10px 12px; text-align: left; white-space: normal;
+  background: #f8fafc; color: #64748b;
+}
+.tab-items .ti-todo__label{ font-size: 14px; font-weight: 700; color: #334155; }
+.tab-items .ti-todo__num{ grid-row: span 2; font-size: 26px; line-height: 1; color: #94a3b8; }
+.tab-items .ti-todo__unit{ font-size: 12px; }
+.tab-items .ti-todo__card.has-work{ background: #fff7ed; border-color: #fed7aa; }
+.tab-items .ti-todo__card.has-work .ti-todo__num{ color: #c2410c; }
 .tab-items .ti-count{ margin: 0 0 8px; font-size: 12px; color: #64748b; }
 .tab-items .ti-row{ cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .tab-items .ti-row:hover{ background: #f8fafc; }
@@ -186,6 +200,82 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
     document.head.append(style);
   }
 
+  /* ---------- home (검색 전 첫 화면) ---------- */
+  const RECENT_KEY = 'warenavi.items.recent';
+  const RECENT_MAX = 10;
+  // 오늘 할 일 카드: /tab_counts 의 값 → 누르면 가는 탭
+  const TODOS = [
+    { key: 'irregular_open', label: '이형포장', unit: '남은 묶음', tab: 'irregular' },
+    { key: 'stock_check_pending', label: '재고확인', unit: '미확인', tab: 'stockcheck' },
+    { key: 'mismatch_open', label: '불일치', unit: '미처리', tab: 'stockcheck', params: { open: 1 } },
+    { key: 'display_open', label: '진열보충', unit: '미완료', tab: 'display' },
+  ];
+
+  // 최근 본 상품은 이 기기(브라우저)에만 저장한다. 저장소를 못 쓰는 환경에서는 그냥 비어 있다.
+  function readRecent() {
+    try {
+      const list = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+      return Array.isArray(list) ? list.filter(r => r && typeof r.code === 'string' && r.code).slice(0, RECENT_MAX) : [];
+    } catch (_) { return []; }
+  }
+  function writeRecent(list) {
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch (_) {}
+  }
+  function pushRecent(item) {
+    if (!item || !item.code) return;
+    const rest = readRecent().filter(r => r.code !== item.code);
+    writeRecent([{ code: item.code, name: item.name || '', location: item.location || '' }].concat(rest));
+  }
+
+  function todoHtml() {
+    const counts = Shell.counts();
+    return TODOS.map((t, i) => {
+      const n = counts ? (Number(counts[t.key]) || 0) : null;
+      return `
+        <button type="button" class="ti-todo__card${n ? ' has-work' : ''}" data-act="todo" data-idx="${i}">
+          <span class="ti-todo__label">${esc(t.label)}</span>
+          <b class="ti-todo__num">${n === null ? '-' : esc(UI.num(n))}</b>
+          <span class="ti-todo__unit">${n === 0 ? '없음' : esc(t.unit)}</span>
+        </button>`;
+    }).join('');
+  }
+
+  function recentRowHtml(r) {
+    const loc = isNoLocation(r.location) ? '로케이션 미지정' : r.location;
+    return `
+      <li class="wl-row ti-row" data-code="${esc(r.code)}" role="button" tabindex="0">
+        <div class="wl-main">
+          <div class="wl-code"><strong>${esc(r.code)}</strong><span class="ti-loc">${esc(loc)}</span></div>
+          <div class="wl-name">${esc(r.name)}</div>
+        </div>
+      </li>`;
+  }
+
+  function homeHtml() {
+    const recent = readRecent();
+    return `
+      <div class="ti-home">
+        <button type="button" class="btn-primary ti-home__scan" data-act="scan">📷 라벨 찍어서 찾기</button>
+        <section>
+          <h3 class="ti-home__title">오늘 할 일</h3>
+          <div class="ti-todo">${todoHtml()}</div>
+        </section>
+        <section>
+          <h3 class="ti-home__title">최근 본 상품
+            ${recent.length ? '<button type="button" class="btn-sm btn-ghost" data-act="recent-clear">지우기</button>' : ''}</h3>
+          ${recent.length
+            ? `<ul class="wl-list">${recent.map(recentRowHtml).join('')}</ul>`
+            : '<p class="empty">상품을 조회하면 여기에 최근 10개가 남습니다.</p>'}
+        </section>
+      </div>`;
+  }
+
+  // 건수가 새로 도착했을 때 카드 숫자만 바꾼다(첫 화면이 떠 있을 때만).
+  function refreshTodo() {
+    const box = state.root && state.root.querySelector('.ti-todo');
+    if (box) box.innerHTML = todoHtml();
+  }
+
   /* ---------- list ---------- */
   function rowHtml(it) {
     const selected = it.code === state.code;
@@ -216,7 +306,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       return;
     }
     if (state.list === null) {
-      pane.innerHTML = '<p class="empty">SKU코드, 로케이션, 상품명으로 검색하세요.</p>';
+      pane.innerHTML = homeHtml();
       return;
     }
     if (!state.list.length) {
@@ -658,6 +748,8 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       if (!data || !data.item) throw new Error('상품 정보를 찾을 수 없습니다.');
       state.item = data.item;
       state.code = data.item.code || code;
+      pushRecent(state.item);
+      if (state.list === null && !state.listLoading && !state.listError) renderList();   // 첫 화면의 최근 목록 갱신
     } catch (err) {
       if (seq !== state.detailSeq) return;
       if (silent) return;   // 기존 카드 유지
@@ -732,7 +824,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       const changed = Array.isArray(res && res.changed) ? res.changed : [];
       UI.toast(changed.length ? `저장했습니다 (${changed.length}개 항목 변경)` : '변경된 내용이 없습니다', changed.length ? 'ok' : 'info');
       if (state.code !== item.code) return;   // 저장 중 다른 상품으로 넘어간 경우
-      if (res && res.item) state.item = res.item;
+      if (res && res.item) { state.item = res.item; pushRecent(res.item); }
       state.mode = 'view';
       renderDetail();
       patchListRow(state.item);
@@ -796,6 +888,8 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       else if (act === 'scan') scanPhoto(actEl);
       else if (act === 'scan-pick') applyScan((state.scan || [])[Number(actEl.dataset.idx)]);
       else if (act === 'scan-close') clearScan();
+      else if (act === 'todo') { const t = TODOS[Number(actEl.dataset.idx)]; if (t) Shell.show(t.tab, t.params); }
+      else if (act === 'recent-clear') { writeRecent([]); renderList(); }
       return;
     }
     const row = ev.target.closest('.ti-row');
@@ -869,6 +963,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
     root.addEventListener('input', onInput);
     root.addEventListener('change', onChange);
     root.addEventListener('keydown', onKeydown);
+    window.addEventListener('shell:counts', refreshTodo);
     renderList();
     renderDetail();
   }

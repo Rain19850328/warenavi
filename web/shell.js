@@ -239,6 +239,9 @@
       try { if (typeof todayYmd === 'function') date = todayYmd(); } catch (_) {}
       const c = (await window.UI.api.get('/tab_counts', { date })) || {};
       const n = v => Number(v) || 0;
+      state.counts = c;
+      // 상품조회 첫 화면의 '오늘 할 일' 카드가 같은 숫자를 쓴다.
+      try { window.dispatchEvent(new CustomEvent('shell:counts')); } catch (_) {}
       setBadge('stockcheck', n(c.stock_check_pending) + n(c.mismatch_open));
       setBadge('display', n(c.display_open));
       setBadge('irregular', n(c.irregular_open));
@@ -282,5 +285,6 @@
     current: () => state.current || DEFAULT_ID,
     setBadge,
     refreshBadges,
+    counts: () => state.counts || null,   // 마지막으로 받은 /tab_counts 응답(아직 없으면 null)
   };
 })();
