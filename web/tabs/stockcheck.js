@@ -433,6 +433,7 @@
   async function autoSoldout(id) {
     const r = state.index.get(String(id));
     if (!r || r.status !== 'match' || r.in_soldout) return;
+    if (isDisc(r)) return;   // 단종 상품은 다시 들여오지 않으므로 자동 등록하지 않는다(버튼으로는 직접 추가 가능)
     const qty = numOrNull(r.counted_qty) ?? totalStock(r);
     if (qty === null || qty >= AUTO_SOLDOUT_BELOW) return;
     try {
