@@ -120,17 +120,22 @@
 .tab-items .ti-home{ display: grid; gap: 16px; }
 .tab-items .ti-home__scan{ width: 100%; min-height: 56px; font-size: 17px; font-weight: 700; }
 .tab-items .ti-home__title{ display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; font-size: 13px; font-weight: 700; color: #334155; }
-.tab-items .ti-todo{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.tab-items .ti-todo__card{
-  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0 8px;
-  min-height: 64px; padding: 10px 12px; text-align: left; white-space: normal;
-  background: #f8fafc; color: #64748b;
+/* 오늘 할 일: 다른 목록과 같은 흰 카드 하나에 줄로 나열한다(숫자는 오른쪽, 할 일이 있을 때만 색) */
+.tab-items .ti-todo{ border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; overflow: hidden; }
+.tab-items .ti-todo:empty{ display: none; }
+.tab-items .ti-todo .ti-todo__card{
+  appearance: none; display: flex; align-items: center; gap: 8px;
+  width: 100%; min-height: 48px; margin: 0; padding: 0 12px;
+  border: 0; border-radius: 0; box-shadow: none; background: none; transform: none;
+  font: inherit; text-align: left; color: #0f172a; cursor: pointer;
 }
-.tab-items .ti-todo__label{ font-size: 14px; font-weight: 700; color: #334155; }
-.tab-items .ti-todo__num{ grid-row: span 2; font-size: 26px; line-height: 1; color: #94a3b8; }
-.tab-items .ti-todo__unit{ font-size: 12px; }
-.tab-items .ti-todo__card.has-work{ background: #fff7ed; border-color: #fed7aa; }
-.tab-items .ti-todo__card.has-work .ti-todo__num{ color: #c2410c; }
+.tab-items .ti-todo .ti-todo__card + .ti-todo__card{ border-top: 1px solid #f1f5f9; }
+.tab-items .ti-todo .ti-todo__card:hover, .tab-items .ti-todo .ti-todo__card:active{ background: #f8fafc; }
+.tab-items .ti-todo__label{ font-size: 15px; font-weight: 600; }
+.tab-items .ti-todo__unit{ flex: 1 1 auto; font-size: 12px; color: #94a3b8; }
+.tab-items .ti-todo__num{ font-size: 17px; font-weight: 700; color: #cbd5e1; }
+.tab-items .ti-todo__card.has-work .ti-todo__num{ color: #0284c7; }
+.tab-items .ti-todo__card::after{ content: '›'; font-size: 18px; line-height: 1; color: #cbd5e1; }
 .tab-items .ti-count{ margin: 0 0 8px; font-size: 12px; color: #64748b; }
 .tab-items .ti-row{ cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .tab-items .ti-row:hover{ background: #f8fafc; }
@@ -235,8 +240,8 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       return `
         <button type="button" class="ti-todo__card${n ? ' has-work' : ''}" data-act="todo" data-idx="${i}">
           <span class="ti-todo__label">${esc(t.label)}</span>
+          <span class="ti-todo__unit">${esc(t.unit)}</span>
           <b class="ti-todo__num">${n === null ? '-' : esc(UI.num(n))}</b>
-          <span class="ti-todo__unit">${n === 0 ? '없음' : esc(t.unit)}</span>
         </button>`;
     }).join('');
   }
