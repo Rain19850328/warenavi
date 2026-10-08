@@ -4,7 +4,7 @@
 
   const ROLES = [
     { id: 'staff', label: '직원', help: '상품조회 · 이형포장 · 작업로그' },
-    { id: 'manager', label: '매니저', help: '직원 + 재고확인 · 진열보충' },
+    { id: 'manager', label: '매니저', help: '직원 + 재고확인 · 진열보충 · 창고맵' },
     { id: 'admin', label: '관리자', help: '모든 탭 + 권한설정' },
   ];
   const ROLE_RANK = { staff: 1, manager: 2, admin: 3 };

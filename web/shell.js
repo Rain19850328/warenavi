@@ -11,7 +11,7 @@
     { id: 'stockcheck', label: '재고확인', min: 'manager' },
     { id: 'display', label: '진열보충', min: 'manager' },
     { id: 'newinbound', label: '신규입고', min: 'admin' },
-    { id: 'map', label: '창고맵', min: 'admin' },
+    { id: 'map', label: '창고맵', min: 'manager' },
     { id: 'soldout', label: '품절관리', min: 'admin' },
     { id: 'logs', label: '작업로그', min: 'staff' },
     { id: 'users', label: '권한설정', min: 'admin' },
