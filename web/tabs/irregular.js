@@ -10,11 +10,11 @@
   const REQUESTS = {
     stock: {
       path: '/stock_checks/request', key: 'stock_check',
-      label: '재고확인 요청', doneLabel: '재고확인 요청됨', okMsg: '재고확인 리스트에 추가했습니다',
+      label: '재고확인 요청', icon: '🔍', short: '재고확인', okMsg: '재고확인 리스트에 추가했습니다',
     },
     display: {
       path: '/display_requests/request', key: 'display',
-      label: '진열 요청', doneLabel: '진열 요청됨', okMsg: '진열보충 리스트에 추가했습니다',
+      label: '진열 요청', icon: '📦', short: '진열', okMsg: '진열보충 리스트에 추가했습니다',
     },
   };
   const EMPTY_TEXT = '이 날짜에 저장된 이형 리스트가 없습니다. MOPS 물류관리에서 엑셀로 출력하면 자동으로 저장됩니다.';
@@ -112,12 +112,15 @@
 .tab-irregular .irr-title{ font-size:16px; font-weight:800; color:#0f172a; word-break:break-all; }
 .tab-irregular .irr-lines{ margin:8px 0 0; padding:0; list-style:none; }
 .tab-irregular .irr-line{ padding:10px 0; border-top:1px solid #e2e8f0; }
-.tab-irregular .irr-line-top{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
-.tab-irregular .irr-line .wl-actions{ margin-top:6px; }
+.tab-irregular .irr-line-body{ display:flex; align-items:flex-start; gap:10px; }
+.tab-irregular .irr-info{ flex:1 1 auto; min-width:0; }
+.tab-irregular .irr-side{ flex:0 0 auto; display:flex; flex-direction:column; align-items:stretch; gap:6px; width:104px; }
+.tab-irregular .irr-side .irr-qty{ text-align:right; }
+.tab-irregular .irr-side .irr-req{ display:flex; align-items:center; justify-content:center; gap:4px; width:100%; min-height:40px; padding:0 6px; font-size:13px; white-space:nowrap; }
 .tab-irregular .irr-bundle-actions{ padding-top:10px; border-top:1px solid #e2e8f0; }
 .tab-irregular .irr-loc{ font-size:20px; font-weight:800; line-height:1.25; color:#0f172a; word-break:break-all; }
 .tab-irregular .irr-code{ appearance:none; display:inline-block; min-height:32px; padding:4px 0; border:0; background:none; color:#0369a1; font:inherit; font-size:13px; text-decoration:underline; text-align:left; cursor:pointer; }
-.tab-irregular .irr-qty{ flex:0 0 auto; font-size:20px; font-weight:800; color:#0f172a; white-space:nowrap; }
+.tab-irregular .irr-qty{ font-size:20px; font-weight:800; color:#0f172a; white-space:nowrap; }
 .tab-irregular .wl-row.is-done{ opacity:1; }
 .tab-irregular .wl-row{ display:block; }
 .tab-irregular .wl-row.is-done .irr-head, .tab-irregular .wl-row.is-done .irr-lines{ opacity:.55; }
@@ -174,7 +177,8 @@
     return Object.keys(REQUESTS).map(kind => {
       const r = REQUESTS[kind];
       const on = !!open[r.key];
-      return `<button type="button" class="btn-sm irr-req${on ? ' is-requested' : ''}" data-act="req" data-kind="${kind}">${on ? r.doneLabel : r.label}</button>`;
+      const title = on ? `${r.label}됨` : r.label;
+      return `<button type="button" class="btn-sm irr-req${on ? ' is-requested' : ''}" data-act="req" data-kind="${kind}" title="${title}" aria-label="${title}"><span aria-hidden="true">${on ? '✓' : r.icon}</span>${r.short}</button>`;
     }).join('');
   }
 
@@ -191,14 +195,18 @@
     const note = state.note && String(state.note.id) === String(b.id) && String(state.note.line) === String(line.id) ? state.note : null;
     return `
       <li class="irr-line" data-line="${esc(line.id)}">
-        <div class="irr-line-top">
-          <span class="irr-loc">${esc(locText(line.location_code))}</span>
-          <span class="irr-qty">${esc(UI.num(line.qty))}개</span>
+        <div class="irr-line-body">
+          <div class="irr-info">
+            <div class="irr-loc">${esc(locText(line.location_code))}</div>
+            <button type="button" class="wl-code irr-code" data-act="open-item">${esc(line.item_code)}</button>
+            <div class="wl-name">${esc(line.item_name)}</div>
+            <div class="wl-meta"><span>재고 ${esc(UI.num(line.stock_today))}</span> ${UI.rackChips(line.racks)}</div>
+          </div>
+          <div class="irr-side">
+            <div class="irr-qty">${esc(UI.num(line.qty))}개</div>
+            ${reqHtml(line)}
+          </div>
         </div>
-        <button type="button" class="wl-code irr-code" data-act="open-item">${esc(line.item_code)}</button>
-        <div class="wl-name">${esc(line.item_name)}</div>
-        <div class="wl-meta"><span>재고 ${esc(UI.num(line.stock_today))}</span> ${UI.rackChips(line.racks)}</div>
-        <div class="wl-actions">${reqHtml(line)}</div>
         <div class="irr-note"${note ? '' : ' hidden'}>${note ? noteHtml(note) : ''}</div>
       </li>`;
   }
