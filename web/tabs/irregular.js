@@ -618,5 +618,12 @@
     load();
   }
 
-  Shell.register({ id: 'irregular', label: '이형포장', mount, onShow, onHide() {} });
+  // 다른 곳에서 바뀐 내용 반영. 요청 내용을 적는 중이면 미룬다.
+  function onRemoteChange() {
+    if (state.note) return false;
+    if (state.loaded) load();
+    return true;
+  }
+
+  Shell.register({ id: 'irregular', label: '이형포장', mount, onShow, onHide() {}, onRemoteChange });
 })();

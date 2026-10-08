@@ -436,6 +436,7 @@
     const seq = ++st.seq;
     st.loading = true;
     st.loadingMore = false;
+    st.extended = false;
     st.error = '';
     st.moreError = '';
     renderStatus();
@@ -463,6 +464,7 @@
     const seq = st.seq;
     const before = st.next;
     st.loadingMore = true;
+    st.extended = true;   // '더 보기'로 이어 붙인 목록은 자동으로 새로 받지 않는다(읽던 위치가 사라지므로)
     st.moreError = '';
     renderStatus();
     try {
@@ -649,5 +651,11 @@
     cancelSearchTimer();
   }
 
-  Shell.register({ id: 'logs', label: '작업로그', mount, onShow, onHide, _describe: describe });
+  function onRemoteChange() {
+    if (st.loading || st.loadingMore) return false;
+    if (st.loaded && !st.extended && (window.scrollY || 0) < 200) load();
+    return true;
+  }
+
+  Shell.register({ id: 'logs', label: '작업로그', mount, onShow, onHide, onRemoteChange, _describe: describe });
 })();

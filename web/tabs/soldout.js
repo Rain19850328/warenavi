@@ -351,5 +351,10 @@
     load();
   }
 
-  Shell.register({ id: 'soldout', label: '품절관리', mount, onShow, onHide() {} });
+  function onRemoteChange() {
+    if (state.loaded) load();
+    return true;
+  }
+
+  Shell.register({ id: 'soldout', label: '품절관리', mount, onShow, onHide() {}, onRemoteChange });
 })();

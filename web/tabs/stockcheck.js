@@ -374,11 +374,14 @@
   /* ---------- data ---------- */
   function currentKey() { return state.openMode ? 'open' : `date:${state.date}`; }
 
-  async function load() {
+  // keep: 다른 곳에서 바뀐 내용을 반영할 때. 방금 처리해 화면에 남겨 둔 줄(sticky)을 지우지 않는다.
+  async function load({ keep = false } = {}) {
     const key = currentKey();
     const seq = ++state.seq;
-    state.form = null;
-    state.sticky.clear();
+    if (!keep) {
+      state.form = null;
+      state.sticky.clear();
+    }
     // 같은 목록을 다시 불러올 때는 화면을 비우지 않는다(스크롤 유지)
     if (!(state.phase === 'ready' && state.loadedKey === key)) {
       state.phase = 'loading';
@@ -634,5 +637,12 @@
     if (state.phase === 'loading') state.phase = 'idle';
   }
 
-  Shell.register({ id: 'stockcheck', label: '재고확인', mount, onShow, onHide });
+  // 다른 곳에서 바뀐 내용 반영. 불일치·처리 내용을 적는 중이면 미룬다.
+  function onRemoteChange() {
+    if (state.form) return false;
+    if (state.phase === 'ready') load({ keep: true });
+    return true;
+  }
+
+  Shell.register({ id: 'stockcheck', label: '재고확인', mount, onShow, onHide, onRemoteChange });
 })();

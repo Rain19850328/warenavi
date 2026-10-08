@@ -201,6 +201,7 @@
         if (el) el.hidden = viewId !== id;
       }
       state.current = id;
+      state.changePending = false;   // 새로 여는 화면은 어차피 최신 내용을 받아 온다
     }
     state.activeKey = buildHash(id, params);
     renderBar();
@@ -267,6 +268,7 @@
     window.addEventListener('hashchange', onHashChange);
     const route = parseHash(location.hash);
     activate(route.id, route.params);
+    startWatch();
   }
 
   function register(def) {
@@ -289,14 +291,22 @@
     renderBar();
   }
 
-  async function fetchBadges() {
+  // watch = 주기 확인에서 부른 경우. 그때만 '다른 곳에서 바뀜'으로 보고 지금 화면을 새로 고친다.
+  // (탭을 옮기거나 내가 방금 저장해서 부른 경우는 화면이 이미 최신이라 표시만 맞춰 둔다.)
+  async function fetchBadges(watch) {
     try {
       if (!window.UI || !window.UI.api) return;
       let date;
       try { if (typeof todayYmd === 'function') date = todayYmd(); } catch (_) {}
+      const viewAtStart = state.current;
       const c = (await window.UI.api.get('/tab_counts', { date })) || {};
+      state.lastFetchAt = Date.now();
       const n = v => Number(v) || 0;
       state.counts = c;
+      if (typeof c.change_stamp === 'string') {
+        if (watch && state.stamp && c.change_stamp !== state.stamp && state.current === viewAtStart) state.changePending = true;
+        state.stamp = c.change_stamp;
+      }
       // 권한을 내려주지 않는 예전 서버에서는 지금까지처럼 모든 탭을 보여준다.
       if (typeof c.role === 'string') setRole(c.role, c.role_bootstrap);
       else setRole('admin', false);
@@ -312,20 +322,74 @@
     }
   }
 
-  function refreshBadges() {
+  function refreshBadges(watch) {
     // 조회 중에 또 불리면(방금 저장한 내용이 빠졌을 수 있으므로) 끝난 뒤 한 번 더 조회한다.
-    if (state.badgePromise) { state.badgeAgain = true; return state.badgePromise; }
+    if (state.badgePromise) { if (!watch) state.badgeAgain = true; return state.badgePromise; }
     state.badgePromise = (async () => {
       try {
+        let watching = watch === true;
         do {
           state.badgeAgain = false;
-          await fetchBadges();
+          await fetchBadges(watching);
+          watching = false;
         } while (state.badgeAgain);
       } finally {
         state.badgePromise = null;
       }
     })();
     return state.badgePromise;
+  }
+
+  /* ---------- 다른 곳에서 바뀐 내용 자동 반영 ---------- */
+  const WATCH_MS = 25000;        // 화면이 켜져 있는 동안 변경 여부를 확인하는 간격
+  const WATCH_MIN_GAP_MS = 5000; // 화면으로 돌아왔을 때 방금 확인했으면 다시 묻지 않는다
+
+  // 사용자가 무언가 입력·선택하는 중이면 화면을 바꾸지 않는다(다음 확인 때 다시 시도).
+  function isUserBusy() {
+    if (document.querySelector('dialog[open]')) return true;
+    if (isPicking()) return true;
+    const el = document.activeElement;
+    const view = viewEl(state.current);
+    if (!el || !view || !view.contains(el)) return false;
+    if (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+    // 검색창·날짜는 계속 포커스가 남아 있는 칸이라 입력 중으로 보지 않는다.
+    return el.tagName === 'INPUT' && !['search', 'date', 'checkbox', 'radio', 'button', 'submit'].includes(el.type);
+  }
+
+  function deliverChange() {
+    if (!state.changePending || isUserBusy()) return;
+    const id = state.current;
+    if (id === 'map') {
+      state.changePending = false;
+      try {
+        if (typeof loadCells === 'function') Promise.resolve(loadCells()).catch(() => {});
+        if (typeof loadMovements === 'function') Promise.resolve(loadMovements()).catch(() => {});
+      } catch (_) {}
+      return;
+    }
+    const entry = state.registry[id];
+    if (!entry || !entry.mounted || typeof entry.def.onRemoteChange !== 'function') { state.changePending = false; return; }
+    try {
+      // 탭이 false 를 돌려주면(작성 중인 칸이 있는 등) 다음 확인 때 다시 시도한다.
+      if (entry.def.onRemoteChange() !== false) state.changePending = false;
+    } catch (err) {
+      state.changePending = false;
+      console.error(`[Shell] ${id}.onRemoteChange failed`, err);
+    }
+  }
+
+  async function watchTick() {
+    if (!state.started || document.visibilityState !== 'visible') return;
+    await refreshBadges(true);
+    deliverChange();
+  }
+
+  function startWatch() {
+    setInterval(watchTick, WATCH_MS);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - (state.lastFetchAt || 0) >= WATCH_MIN_GAP_MS) watchTick();
+    });
   }
 
   // 첫 화면이 창고맵이 아니면, app.js 준비가 끝나기 전에 창고맵이 잠깐 비치지 않도록 미리 가려 둔다.
@@ -344,11 +408,12 @@
     show,
     current: () => state.current || DEFAULT_ID,
     setBadge,
-    refreshBadges,
+    refreshBadges: () => refreshBadges(false),
     counts: () => state.counts || null,   // 마지막으로 받은 /tab_counts 응답(아직 없으면 null)
     can,                                  // 내 권한으로 이 탭을 볼 수 있는지
     role: () => state.role,
     roleLabel: role => ROLE_LABELS[role || state.role] || '',
     isBootstrap: () => state.bootstrap,
+    checkNow: watchTick,                  // 다른 곳에서 바뀐 내용이 있는지 지금 확인
   };
 })();

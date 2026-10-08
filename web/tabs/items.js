@@ -1000,5 +1000,11 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
     }
   }
 
-  Shell.register({ id: 'items', label: '상품조회', mount, onShow, onHide });
+  function onRemoteChange() {
+    if (state.mode === 'edit' || state.noteFor) return false;
+    if (state.code && state.item && !state.detailLoading) loadDetail(state.code, { silent: true });
+    return true;
+  }
+
+  Shell.register({ id: 'items', label: '상품조회', mount, onShow, onHide, onRemoteChange });
 })();

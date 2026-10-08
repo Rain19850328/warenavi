@@ -201,5 +201,10 @@
   function onShow() { load(); }
   function onHide() { state.seq++; }
 
-  Shell.register({ id: 'users', label: '권한설정', mount, onShow, onHide });
+  function onRemoteChange() {
+    if (state.phase === 'ready') load();
+    return true;
+  }
+
+  Shell.register({ id: 'users', label: '권한설정', mount, onShow, onHide, onRemoteChange });
 })();

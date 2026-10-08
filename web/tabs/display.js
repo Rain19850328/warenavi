@@ -273,10 +273,11 @@
   }
 
   /* ---------- data ---------- */
-  async function load() {
+  // keep: 다른 곳에서 바뀐 내용을 반영할 때. 방금 완료해 화면에 남겨 둔 줄(sticky)을 지우지 않는다.
+  async function load({ keep = false } = {}) {
     const date = state.date;
     const seq = ++state.seq;
-    state.sticky.clear();
+    if (!keep) state.sticky.clear();
     if (state.loadedDate !== date) state.pick.clear();
     // 같은 날짜를 다시 불러올 때는 화면을 비우지 않는다(스크롤 유지)
     if (!(state.phase === 'ready' && state.loadedDate === date)) {
@@ -501,5 +502,10 @@
     if (state.phase === 'loading') state.phase = 'idle';
   }
 
-  Shell.register({ id: 'display', label: '진열보충', mount, onShow, onHide });
+  function onRemoteChange() {
+    if (state.phase === 'ready') load({ keep: true });
+    return true;
+  }
+
+  Shell.register({ id: 'display', label: '진열보충', mount, onShow, onHide, onRemoteChange });
 })();

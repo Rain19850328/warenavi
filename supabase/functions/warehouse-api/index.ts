@@ -1066,13 +1066,20 @@ Deno.serve(async (req) => {
 
     if (req.method === "GET" && path === "/tab_counts") {
       // 화면이 탭을 옮길 때마다 부르는 경로라, 내 권한도 함께 내려 바뀐 권한이 곧바로 반영되게 한다.
-      const [counts, info] = await Promise.all([
+      // change_stamp 는 '누군가 무엇을 바꿨는지' 표시로, 화면이 주기적으로 받아 달라졌을 때만 목록을 새로 불러온다.
+      const [counts, info, stamp] = await Promise.all([
         callRpc("warehouse_get_tab_counts", {
           p_date: getDateParam(url.searchParams.get("date")),
         }),
         getRoleInfo(auth),
+        callRpc("warehouse_get_change_stamp").catch(() => null),
       ]);
-      return json(req, { ...(counts as Record<string, unknown>), role: info.role, role_bootstrap: info.bootstrap });
+      return json(req, {
+        ...(counts as Record<string, unknown>),
+        role: info.role,
+        role_bootstrap: info.bootstrap,
+        change_stamp: typeof stamp === "string" ? stamp : null,
+      });
     }
 
     return json(req, { detail: `Unsupported route: ${req.method} ${path}` }, 404);
