@@ -4,8 +4,9 @@
 (function () {
   'use strict';
 
-  const MAX_SIDE = 1280;      // 긴 변 기준 축소 크기(px)
-  const JPEG_QUALITY = 0.8;
+  const MAX_SIDE = 1568;      // 긴 변 기준 축소 크기(px). 기울어진 작은 글자도 읽히도록 인식 모델이 받는 최대 크기에 맞춘다
+  const JPEG_QUALITY = 0.85;
+  const MAX_ATTEMPTS = 3;     // 못 찾으면 사진을 돌려 다시 읽는 횟수 포함
   const PICK_IDLE_MS = 800;   // 카메라에서 돌아온 뒤 이 시간 안에 사진이 없으면 취소로 본다
 
   let picker = null;
@@ -71,25 +72,55 @@
     return loadImage(file);
   }
 
-  // 긴 변 MAX_SIDE 이하의 JPEG로 줄여 base64로 돌려준다.
-  async function shrink(file) {
+  // 긴 변 MAX_SIDE 이하의 JPEG로 줄여 base64로 돌려준다. rotate(0/90/180/270)만큼 시계 방향으로 돌려서 그린다.
+  async function shrink(file, rotate) {
     const source = await decode(file);
     const sw = source.width || source.naturalWidth;
     const sh = source.height || source.naturalHeight;
     if (!sw || !sh) throw new Error('사진을 열지 못했습니다.');
+    const angle = [90, 180, 270].includes(Number(rotate)) ? Number(rotate) : 0;
     const scale = Math.min(1, MAX_SIDE / Math.max(sw, sh));
+    const dw = Math.max(1, Math.round(sw * scale));
+    const dh = Math.max(1, Math.round(sh * scale));
+    const sideways = angle === 90 || angle === 270;
     const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(sw * scale));
-    canvas.height = Math.max(1, Math.round(sh * scale));
+    canvas.width = sideways ? dh : dw;
+    canvas.height = sideways ? dw : dh;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#fff';   // 투명 배경(PNG)이 검게 나오지 않도록
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(angle * Math.PI / 180);
+    ctx.drawImage(source, -dw / 2, -dh / 2, dw, dh);
     if (typeof source.close === 'function') source.close();
     const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
     const comma = dataUrl.indexOf(',');
     if (!dataUrl.startsWith('data:image/jpeg') || comma < 0) throw new Error('사진을 변환하지 못했습니다.');
     return { media_type: 'image/jpeg', image_base64: dataUrl.slice(comma + 1), width: canvas.width, height: canvas.height };
+  }
+
+  const hasCodes = res => !!(res && Array.isArray(res.candidates) && res.candidates.length);
+
+  // 사진 한 장을 읽는다. DB에 있는 코드를 못 찾으면 서버가 알려준 방향(rotate)대로 돌려서 다시 읽는다.
+  // 글자가 거꾸로이거나 옆으로 누운 라벨을 위한 것으로, 방향 힌트가 없으면 180도(거꾸로)를 한 번 시도한다.
+  async function readPhoto(file) {
+    let angle = 0;
+    const tried = [];
+    const raw = [];
+    let last = null;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      tried.push(angle);
+      const image = await api.shrink(file, angle);
+      last = await UI.api.post('/scan_code', { image_base64: image.image_base64, media_type: image.media_type });
+      for (const text of (last && Array.isArray(last.raw) ? last.raw : [])) if (text && !raw.includes(text)) raw.push(text);
+      if (hasCodes(last)) break;
+      const hint = [90, 180, 270].includes(Number(last && last.rotate)) ? Number(last.rotate) : 0;
+      let next = (angle + hint) % 360;
+      if (tried.includes(next)) next = [180, 90, 270].find(a => !tried.includes(a));
+      if (next === undefined || attempt + 1 >= MAX_ATTEMPTS) break;
+      angle = next;
+    }
+    return Object.assign({}, last, { raw, attempts: tried.length });
   }
 
   // 촬영 → 축소 → 서버 인식. 결과 {candidates, raw}, 취소했거나 실패하면 undefined(실패는 화면에 알린다).
@@ -98,8 +129,7 @@
     if (!file) return undefined;
     return UI.busy(button, async () => {
       try {
-        const image = await api.shrink(file);
-        return await UI.api.post('/scan_code', { image_base64: image.image_base64, media_type: image.media_type });
+        return await readPhoto(file);
       } catch (err) {
         if (!err || err.code !== 'AUTH_REQUIRED') notify(button, (err && err.message) || '사진을 읽지 못했습니다.');
         return undefined;
@@ -199,6 +229,6 @@
     }
   });
 
-  const api = { pick, shrink, recognize, choose, fill };
+  const api = { pick, shrink, recognize, choose, fill };   // readPhoto 가 api.shrink 를 거치므로 시험에서 바꿔 끼울 수 있다
   window.Scan = api;
 })();

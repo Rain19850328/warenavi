@@ -105,28 +105,26 @@ const SCAN_MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const SCAN_MAX_CODES = 8;
 const SCAN_PROMPT = [
   "이 사진은 창고의 상품 라벨 또는 선반(랙) 라벨입니다.",
+  "라벨이 거꾸로(180도) 찍혔거나 옆으로 누웠거나 비스듬히 기울어져 있을 수 있습니다.",
+  "먼저 글자가 어느 방향으로 놓였는지 판단하고, 머릿속으로 바로 세운 뒤에 읽어 주세요.",
   "사진에 인쇄된 글자 중 '코드'로 보이는 것만 골라 주세요. 형식 예시는 다음과 같습니다.",
   "- 랙 코드: SR1-05-02, SR2-A-03",
   "- 로케이션 코드: D-02-02-01 (영문·숫자가 하이픈으로 이어진 형태)",
   "- SKU 코드: 영문 1자 + 숫자 8자 (예: A00100301)",
   "상품명, 가격, 날짜, 전화번호, 수량 같은 글자는 넣지 마세요.",
+  "뒤집히면 서로 바뀌어 보이는 글자(6과 9, 2와 5 등)나 비슷한 글자(0과 O, 1과 I, 8과 B)가 확실하지 않으면 가능한 읽기를 둘 다 넣으세요.",
   `보이는 그대로 대문자로 옮기고, 가장 또렷하고 크게 보이는 것부터 최대 ${SCAN_MAX_CODES}개까지만 넣으세요.`,
-  '설명 없이 JSON 문자열 배열 하나만 출력하세요. 예: ["A00100301","D-02-02-01"]. 코드가 없으면 [] 를 출력하세요.',
+  "설명 없이 아래 형식의 JSON 객체 하나만 출력하세요.",
+  '{"rotate": 0, "codes": ["A00100301", "D-02-02-01"]}',
+  "rotate 는 글자가 바로 서려면 사진을 시계 방향으로 몇 도 돌려야 하는지입니다. 0, 90, 180, 270 중 하나만 쓰세요(이미 바로 서 있으면 0).",
+  '코드가 없으면 codes 를 [] 로 두세요.',
 ].join("\n");
 
-function parseScanCodes(text: string): string[] {
-  const start = text.indexOf("[");
-  const end = text.lastIndexOf("]");
-  if (start < 0 || end <= start) return [];
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text.slice(start, end + 1));
-  } catch (_) {
-    return [];
-  }
-  if (!Array.isArray(parsed)) return [];
+type ScanReading = { codes: string[]; rotate: number };
+
+function cleanScanCodes(values: unknown[]): string[] {
   const out: string[] = [];
-  for (const value of parsed) {
+  for (const value of values) {
     const code = String(value ?? "").replace(/\s+/g, "").toUpperCase();
     // 코드에 쓰이는 글자만 허용(검색어로 그대로 쓰이므로 엄격하게 거른다)
     if (!/^[A-Z0-9][A-Z0-9\-_.]{2,39}$/.test(code)) continue;
@@ -136,7 +134,33 @@ function parseScanCodes(text: string): string[] {
   return out;
 }
 
-async function readCodesFromImage(imageBase64: string, mediaType: string): Promise<string[]> {
+function tryParseJson(text: string, open: string, close: string): unknown {
+  const start = text.indexOf(open);
+  const end = text.lastIndexOf(close);
+  if (start < 0 || end <= start) return undefined;
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch (_) {
+    return undefined;
+  }
+}
+
+// 응답은 {"rotate":0,"codes":[…]} 객체. 배열만 온 경우도 받아 준다.
+function parseScanReading(text: string): ScanReading {
+  const obj = tryParseJson(text, "{", "}");
+  if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+    const record = obj as Record<string, unknown>;
+    const rotate = Number(record.rotate);
+    return {
+      codes: cleanScanCodes(Array.isArray(record.codes) ? record.codes : []),
+      rotate: [90, 180, 270].includes(rotate) ? rotate : 0,
+    };
+  }
+  const list = tryParseJson(text, "[", "]");
+  return { codes: cleanScanCodes(Array.isArray(list) ? list : []), rotate: 0 };
+}
+
+async function readCodesFromImage(imageBase64: string, mediaType: string): Promise<ScanReading> {
   const apiKey = (Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim();
   if (!apiKey) throw new Error("사진 검색이 아직 설정되지 않았습니다.");
 
@@ -182,7 +206,7 @@ async function readCodesFromImage(imageBase64: string, mediaType: string): Promi
     .filter((block: { type?: string }) => block?.type === "text")
     .map((block: { text?: string }) => String(block?.text ?? ""))
     .join("\n");
-  return parseScanCodes(text);
+  return parseScanReading(text);
 }
 
 type ScanMatch = { code: string; name: string; location_code: string };
@@ -225,9 +249,21 @@ async function matchScanCode(text: string): Promise<ScanCandidate | null> {
   return matches.length ? { text, kind: "item", matches } : null;
 }
 
-// 헷갈리기 쉬운 글자(O↔0, I·L↔1)를 숫자로 바꾼 형태. 첫 글자(SKU의 영문)는 그대로 둔다.
-function scanLookalike(text: string) {
-  return text.slice(0, 1) + text.slice(1).replace(/O/g, "0").replace(/[IL]/g, "1");
+// 헷갈리기 쉬운 글자를 바꿔 본 형태들. 첫 글자(SKU의 영문)는 그대로 둔다.
+//   숫자로: O→0, I·L→1, B→8, S→5, Z→2, G→6
+//   뒤집힘: 6↔9 (거꾸로 찍힌 라벨에서 서로 바뀌어 읽힌다)
+function scanLookalikes(text: string): string[] {
+  const head = text.slice(0, 1);
+  const tail = text.slice(1);
+  const toDigits = (value: string) =>
+    value.replace(/O/g, "0").replace(/[IL]/g, "1").replace(/B/g, "8").replace(/S/g, "5").replace(/Z/g, "2").replace(/G/g, "6");
+  const swap69 = (value: string) => value.replace(/[69]/g, (ch) => (ch === "6" ? "9" : "6"));
+  const digits = head + toDigits(tail);
+  const out: string[] = [];
+  for (const variant of [digits, head + swap69(tail), head + swap69(toDigits(tail))]) {
+    if (variant !== text && !out.includes(variant)) out.push(variant);
+  }
+  return out;
 }
 
 async function matchScanCodes(codes: string[]): Promise<ScanCandidate[]> {
@@ -238,8 +274,12 @@ async function matchScanCodes(codes: string[]): Promise<ScanCandidate[]> {
   for (const code of codes) push(await matchScanCode(code));
   if (!found.length) {
     for (const code of codes) {
-      const alt = scanLookalike(code);
-      if (alt !== code) push(await matchScanCode(alt));
+      // 랙 코드는 형식만 맞으면 통과하므로 바꿔 보지 않는다.
+      if (isRackCodeText(code)) continue;
+      for (const alt of scanLookalikes(code)) {
+        if (isRackCodeText(alt)) continue;
+        push(await matchScanCode(alt));
+      }
     }
   }
   return found;
@@ -634,8 +674,13 @@ Deno.serve(async (req) => {
       if (imageBase64.length > SCAN_MAX_BASE64_CHARS) {
         throw new Error("사진이 너무 큽니다. 다시 찍어 주세요.");
       }
-      const raw = await readCodesFromImage(imageBase64, mediaType);
-      return json(req, { candidates: await matchScanCodes(raw), raw });
+      const reading = await readCodesFromImage(imageBase64, mediaType);
+      // rotate: 글자가 바로 서려면 시계 방향으로 돌려야 하는 각도. 화면이 못 찾았을 때 돌려서 다시 보낸다.
+      return json(req, {
+        candidates: await matchScanCodes(reading.codes),
+        raw: reading.codes,
+        rotate: reading.rotate,
+      });
     }
 
     if (req.method === "GET" && path === "/items_search") {
