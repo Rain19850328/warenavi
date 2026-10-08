@@ -4,22 +4,37 @@
   'use strict';
 
   // 탭바 순서: 자주 쓰는 순(직원 → 매니저 → 관리자). 휴대폰에서는 앞의 4~5칸이 먼저 보인다.
+  // min = 이 탭을 볼 수 있는 가장 낮은 권한. 권한이 모자란 탭은 탭바에 나오지 않는다.
   const TABS = [
-    { id: 'items', label: '상품조회' },
-    { id: 'irregular', label: '이형포장' },
-    { id: 'stockcheck', label: '재고확인' },
-    { id: 'display', label: '진열보충' },
-    { id: 'newinbound', label: '신규입고' },
-    { id: 'map', label: '창고맵' },
-    { id: 'soldout', label: '품절관리' },
-    { id: 'logs', label: '작업로그' },
+    { id: 'items', label: '상품조회', min: 'staff' },
+    { id: 'irregular', label: '이형포장', min: 'staff' },
+    { id: 'stockcheck', label: '재고확인', min: 'manager' },
+    { id: 'display', label: '진열보충', min: 'manager' },
+    { id: 'newinbound', label: '신규입고', min: 'admin' },
+    { id: 'map', label: '창고맵', min: 'admin' },
+    { id: 'soldout', label: '품절관리', min: 'admin' },
+    { id: 'logs', label: '작업로그', min: 'staff' },
+    { id: 'users', label: '권한설정', min: 'admin' },
   ];
   const VIEW_IDS = TABS.map(t => t.id);
-  const DEFAULT_ID = 'items';   // 주소에 화면 지정이 없을 때 여는 첫 화면
+  const DEFAULT_ID = 'items';   // 주소에 화면 지정이 없을 때 여는 첫 화면(모든 권한이 볼 수 있어야 한다)
+
+  const ROLE_RANK = { staff: 1, manager: 2, admin: 3 };
+  const ROLE_LABELS = { staff: '직원', manager: '매니저', admin: '관리자' };
+  const ROLE_KEY = 'warenavi.role';   // 마지막으로 확인한 내 권한(다음에 열 때 탭이 바로 보이도록)
+
+  function readCachedRole() {
+    try {
+      const role = localStorage.getItem(ROLE_KEY);
+      return Object.prototype.hasOwnProperty.call(ROLE_RANK, role) ? role : null;
+    } catch (_) { return null; }
+  }
 
   const state = {
     started: false,
     current: null,      // 지금 보이는 화면 id
+    role: readCachedRole() || 'staff',   // 서버 답이 오기 전에는 저장해 둔 권한, 없으면 가장 낮은 권한
+    bootstrap: false,   // 관리자가 아직 지정되지 않은 상태(모두 관리자로 동작)
     activeKey: null,    // 지금 화면의 정규화된 해시(중복 onShow 방지용)
     registry: {},       // id -> {def, mounted}
     badges: {},         // id -> count
@@ -32,6 +47,10 @@
   /* ---------- helpers ---------- */
   function viewEl(id) { return document.getElementById(`view-${id}`); }
   function isView(id) { return VIEW_IDS.includes(id); }
+  function can(id) {
+    const tab = TABS.find(t => t.id === id);
+    return !!tab && ROLE_RANK[state.role] >= ROLE_RANK[tab.min];
+  }
 
   function notify(message, tone) {
     if (window.UI && typeof window.UI.toast === 'function') window.UI.toast(message, tone);
@@ -73,7 +92,7 @@
     if (cut >= 0) {
       for (const [key, value] of new URLSearchParams(raw.slice(cut + 1))) params[key] = value;
     }
-    if (!isView(id)) return { id: DEFAULT_ID, params: {} };
+    if (!isView(id) || !can(id)) return { id: DEFAULT_ID, params: {} };
     return { id, params };
   }
 
@@ -120,23 +139,51 @@
     try { btn.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch (_) {}
   }
 
+  // 내 권한으로 볼 수 있는 탭만 그린다(권한이 바뀌면 다시 그린다).
+  function buildBar() {
+    const bar = state.barEl;
+    if (!bar) return;
+    bar.innerHTML = TABS.filter(tab => can(tab.id)).map(tab => `
+      <button type="button" class="tabbar__tab" data-tab="${tab.id}">
+        <span class="tabbar__label">${tab.label}</span>
+        <span class="tabbar__badge" hidden></span>
+      </button>`).join('');
+    renderBar();
+  }
+
   function mountTabBar(barEl) {
     if (!barEl) return;
     state.barEl = barEl;
     barEl.classList.add('tabbar');
     barEl.setAttribute('role', 'navigation');
     barEl.setAttribute('aria-label', '화면 이동');
-    barEl.innerHTML = TABS.map(tab => `
-      <button type="button" class="tabbar__tab" data-tab="${tab.id}">
-        <span class="tabbar__label">${tab.label}</span>
-        <span class="tabbar__badge" hidden></span>
-      </button>`).join('');
+    buildBar();
     barEl.addEventListener('click', ev => {
       const btn = ev.target.closest('.tabbar__tab');
       if (!btn || !barEl.contains(btn)) return;
       show(btn.dataset.tab);
     });
-    renderBar();
+  }
+
+  // 서버가 알려준 내 권한을 반영한다. 볼 수 없게 된 화면에 있으면 첫 화면으로 돌려보낸다.
+  function setRole(role, bootstrap) {
+    const next = Object.prototype.hasOwnProperty.call(ROLE_RANK, role) ? role : 'staff';
+    const boot = bootstrap === true;
+    if (next === state.role && boot === state.bootstrap) return;
+    state.role = next;
+    state.bootstrap = boot;
+    try { localStorage.setItem(ROLE_KEY, next); } catch (_) {}
+    buildBar();
+    if (state.started) {
+      // 주소에 적힌 화면을 이제 볼 수 있으면 그리로, 볼 수 없으면 첫 화면으로 맞춘다.
+      const route = parseHash(location.hash);
+      const key = buildHash(route.id, route.params);
+      if (route.id !== state.current) activate(route.id, route.params);
+      const raw = String(location.hash || '');
+      if (raw && raw !== key) { try { history.replaceState(null, '', key); } catch (_) {} }
+      revealActiveTab();
+    }
+    try { window.dispatchEvent(new CustomEvent('shell:role')); } catch (_) {}
   }
 
   /* ---------- view switching ---------- */
@@ -176,6 +223,10 @@
 
   function show(id, params) {
     if (!isView(id)) id = DEFAULT_ID;
+    if (!can(id)) {
+      notify('이 화면을 볼 권한이 없습니다', 'error');
+      return false;
+    }
 
     if (state.current === 'map' && id !== 'map' && isPicking()) {
       notify('위치 선택 중에는 이동할 수 없습니다', 'error');
@@ -195,13 +246,19 @@
   function onHashChange() {
     const route = parseHash(location.hash);
     const key = buildHash(route.id, route.params);
-    if (key === state.activeKey) return;
+    if (key === state.activeKey) {
+      // 볼 수 없는 화면 주소를 직접 친 경우: 화면은 그대로 두고 주소만 바로잡는다.
+      if (String(location.hash || '') !== key) { try { history.replaceState(null, '', key); } catch (_) {} }
+      return;
+    }
     if (state.current === 'map' && route.id !== 'map' && isPicking()) {
       notify('위치 선택 중에는 이동할 수 없습니다', 'error');
       try { history.replaceState(null, '', state.activeKey || '#/map'); } catch (_) {}
       return;
     }
     activate(route.id, route.params);
+    // 볼 수 없는 화면 주소였으면 첫 화면으로 왔으므로 주소도 맞춘다.
+    if (String(location.hash || '') !== key) { try { history.replaceState(null, '', key); } catch (_) {} }
   }
 
   function start() {
@@ -240,6 +297,9 @@
       const c = (await window.UI.api.get('/tab_counts', { date })) || {};
       const n = v => Number(v) || 0;
       state.counts = c;
+      // 권한을 내려주지 않는 예전 서버에서는 지금까지처럼 모든 탭을 보여준다.
+      if (typeof c.role === 'string') setRole(c.role, c.role_bootstrap);
+      else setRole('admin', false);
       // 상품조회 첫 화면의 '오늘 할 일' 카드가 같은 숫자를 쓴다.
       try { window.dispatchEvent(new CustomEvent('shell:counts')); } catch (_) {}
       setBadge('stockcheck', n(c.stock_check_pending) + n(c.mismatch_open));
@@ -286,5 +346,9 @@
     setBadge,
     refreshBadges,
     counts: () => state.counts || null,   // 마지막으로 받은 /tab_counts 응답(아직 없으면 null)
+    can,                                  // 내 권한으로 이 탭을 볼 수 있는지
+    role: () => state.role,
+    roleLabel: role => ROLE_LABELS[role || state.role] || '',
+    isBootstrap: () => state.bootstrap,
   };
 })();

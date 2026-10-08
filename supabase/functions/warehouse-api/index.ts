@@ -12,6 +12,35 @@ type AuthContext = {
   name: string;
 };
 
+// ---- 권한: 직원(staff) < 매니저(manager) < 관리자(admin) ----
+type Role = "staff" | "manager" | "admin";
+type RoleInfo = { role: Role; bootstrap: boolean };
+const ROLE_RANK: Record<Role, number> = { staff: 1, manager: 2, admin: 3 };
+const ROLE_LABELS: Record<Role, string> = { staff: "직원", manager: "매니저", admin: "관리자" };
+// 여기에 없는 경로는 로그인한 누구나 쓸 수 있다(조회, 상품 수정, 요청 보내기, 이형포장 등).
+const ROUTE_MIN_ROLE: Record<string, Role> = {
+  "POST /stock_checks/record": "manager",
+  "POST /stock_checks/resolve": "manager",
+  "POST /display_requests/status": "manager",
+  "POST /soldout_items/add": "manager",
+  "POST /inbound": "admin",
+  "POST /outbound": "admin",
+  "POST /move": "admin",
+  "POST /set_location": "admin",
+  "POST /new_inbound_list/import": "admin",
+  "POST /new_inbound_list/process": "admin",
+  "POST /stock_status": "admin",
+  "POST /soldout_items/remove": "admin",
+  "GET /users": "admin",
+  "POST /users/role": "admin",
+};
+const USERS_PER_PAGE = 200;
+const USERS_MAX_PAGES = 10;
+
+function asRole(value: unknown): Role {
+  return value === "admin" || value === "manager" ? value : "staff";
+}
+
 function corsHeaders(req: Request) {
   const allowedOrigin = Deno.env.get("ALLOWED_ORIGIN") || "*";
   const requestOrigin = req.headers.get("origin");
@@ -95,6 +124,76 @@ async function callRpc(name: string, args: Record<string, unknown> = {}) {
   const { data, error } = await supabase.rpc(name, args);
   if (error) throw new Error(error.message || "요청을 처리하지 못했습니다.");
   return data;
+}
+
+const roleCache = new WeakMap<AuthContext, Promise<RoleInfo>>();
+
+// 요청 하나에서 권한은 한 번만 조회한다.
+function getRoleInfo(auth: AuthContext): Promise<RoleInfo> {
+  let pending = roleCache.get(auth);
+  if (!pending) {
+    pending = callRpc("warehouse_get_user_role", { p_user_id: auth.userId }).then((data) => {
+      const row = data && typeof data === "object" ? data as Record<string, unknown> : {};
+      return { role: asRole(row.role), bootstrap: row.bootstrap === true };
+    });
+    roleCache.set(auth, pending);
+  }
+  return pending;
+}
+
+// 화면은 401/403 을 '로그인 만료'로 처리하므로 권한 부족은 일반 오류(400)로 알린다.
+async function requireRole(auth: AuthContext, min: Role) {
+  const info = await getRoleInfo(auth);
+  if (ROLE_RANK[info.role] < ROLE_RANK[min]) {
+    throw new Error(`이 작업은 ${ROLE_LABELS[min]} 권한이 필요합니다.`);
+  }
+}
+
+function userDisplayName(user: { email?: string; user_metadata?: unknown }): string {
+  const metadata = user.user_metadata && typeof user.user_metadata === "object"
+    ? user.user_metadata as Record<string, unknown>
+    : {};
+  for (const key of ["display_name", "name"]) {
+    const value = metadata[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return user.email || "";
+}
+
+// 계정 목록(auth.users)과 권한 표를 합친다.
+async function listUsersWithRoles(auth: AuthContext) {
+  const users = [];
+  for (let page = 1; page <= USERS_MAX_PAGES; page++) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: USERS_PER_PAGE });
+    if (error) throw new Error("계정 목록을 불러오지 못했습니다.");
+    users.push(...data.users);
+    if (data.users.length < USERS_PER_PAGE) break;
+  }
+
+  const listed = await callRpc("warehouse_list_user_roles") as Record<string, unknown> | null;
+  const roles = new Map<string, Record<string, unknown>>();
+  for (const row of (Array.isArray(listed?.roles) ? listed.roles : [])) {
+    if (row && typeof row === "object") roles.set(String((row as Record<string, unknown>).user_id), row as Record<string, unknown>);
+  }
+
+  return {
+    me: auth.userId,
+    bootstrap: listed?.has_admin !== true,
+    users: users.map((user) => {
+      const row = roles.get(user.id);
+      return {
+        id: user.id,
+        email: user.email || "",
+        name: userDisplayName(user),
+        role: asRole(row?.role),
+        role_assigned: Boolean(row),
+        role_updated_at: row?.updated_at ?? null,
+        role_updated_by: row?.updated_by_name ?? "",
+        created_at: user.created_at ?? null,
+        last_sign_in_at: user.last_sign_in_at ?? null,
+      };
+    }),
+  };
 }
 
 // ---- 사진 검색(/scan_code): 라벨 사진에서 코드 글자를 읽어 DB와 대조한다 ----
@@ -500,6 +599,32 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const path = getPath(url);
     const auth = await getAuthContext(req);
+
+    const minRole = ROUTE_MIN_ROLE[`${req.method} ${path}`];
+    if (minRole) await requireRole(auth, minRole);
+
+    if (req.method === "GET" && path === "/users") {
+      return json(req, await listUsersWithRoles(auth));
+    }
+
+    if (req.method === "POST" && path === "/users/role") {
+      const body = await readBody(req);
+      const userId = getUuidParam(body.user_id, "계정");
+      const { data, error } = await supabase.auth.admin.getUserById(userId as string);
+      if (error || !data?.user) throw new Error("계정을 찾을 수 없습니다.");
+      return json(
+        req,
+        await callRpc("warehouse_set_user_role", {
+          p_user_id: userId,
+          p_role: String(body.role ?? "").trim(),
+          p_email: data.user.email || "",
+          p_display_name: userDisplayName(data.user),
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
 
     if (req.method === "GET" && path === "/") {
       return json(req, { ok: true, service: "warehouse-api", user: auth });
@@ -940,12 +1065,14 @@ Deno.serve(async (req) => {
     }
 
     if (req.method === "GET" && path === "/tab_counts") {
-      return json(
-        req,
-        await callRpc("warehouse_get_tab_counts", {
+      // 화면이 탭을 옮길 때마다 부르는 경로라, 내 권한도 함께 내려 바뀐 권한이 곧바로 반영되게 한다.
+      const [counts, info] = await Promise.all([
+        callRpc("warehouse_get_tab_counts", {
           p_date: getDateParam(url.searchParams.get("date")),
         }),
-      );
+        getRoleInfo(auth),
+      ]);
+      return json(req, { ...(counts as Record<string, unknown>), role: info.role, role_bootstrap: info.bootstrap });
     }
 
     return json(req, { detail: `Unsupported route: ${req.method} ${path}` }, 404);

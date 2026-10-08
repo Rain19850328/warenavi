@@ -72,6 +72,13 @@
     return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
   }
 
+  const ROLE_LABELS = { staff: '직원', manager: '매니저', admin: '관리자' };
+  function roleLabel(v) {
+    const key = text(v);
+    if (!key) return '직원(기본)';
+    return Object.prototype.hasOwnProperty.call(ROLE_LABELS, key) ? ROLE_LABELS[key] : key;
+  }
+
   const ACTIONS = {
     item_update: d => {
       const changes = Array.isArray(d.changes) ? d.changes.filter(c => c && typeof c === 'object') : [];
@@ -114,6 +121,8 @@
       joinParts([`예상박스: ${val(d.old, '미입력')} → ${val(d.new, '미입력')}`, d.bundle_no ? `묶음 ${text(d.bundle_no)}` : ''])],
     soldout_add: d => ['품절관리', 'danger', 'soldout', withSource('품절관리 등록', d.source)],
     soldout_remove: () => ['품절관리', 'muted', 'soldout', '품절관리에서 제거'],
+    user_role_change: d => ['권한설정', 'warn', '',
+      joinParts([text(d.target_name) || text(d.target_email), `권한: ${roleLabel(d.old)} → ${roleLabel(d.new)}`])],
   };
 
   function describeMovement(log, d) {

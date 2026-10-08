@@ -230,6 +230,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
   function todoHtml() {
     const counts = Shell.counts();
     return TODOS.map((t, i) => {
+      if (!Shell.can(t.tab)) return '';   // 내 권한으로 볼 수 없는 탭의 카드는 빼 둔다
       const n = counts ? (Number(counts[t.key]) || 0) : null;
       return `
         <button type="button" class="ti-todo__card${n ? ' has-work' : ''}" data-act="todo" data-idx="${i}">
@@ -964,6 +965,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
     root.addEventListener('change', onChange);
     root.addEventListener('keydown', onKeydown);
     window.addEventListener('shell:counts', refreshTodo);
+    window.addEventListener('shell:role', refreshTodo);
     renderList();
     renderDetail();
   }
