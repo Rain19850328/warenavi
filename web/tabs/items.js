@@ -214,6 +214,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
     { key: 'stock_check_pending', label: '재고확인', unit: '미확인', tab: 'stockcheck' },
     { key: 'mismatch_open', label: '불일치', unit: '미처리', tab: 'stockcheck', params: { open: 1 } },
     { key: 'display_open', label: '진열보충', unit: '미완료', tab: 'display' },
+    { key: 'review_open', label: '확인요청', unit: '판단 대기', tab: 'review' },
   ];
 
   // 최근 본 상품은 이 기기(브라우저)에만 저장한다. 저장소를 못 쓰는 환경에서는 그냥 비어 있다.

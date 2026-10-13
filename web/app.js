@@ -873,6 +873,7 @@ const NEW_INBOUND = {
   reopenAfterPick: false,
   actionMode: '',
   draftQty: '',
+  query: '',
 };
 
 /* ---------- rack render ---------- */
@@ -1444,6 +1445,23 @@ function getNewInboundSelectedItem(){
   return (NEW_INBOUND.items || []).find(item => item.id === NEW_INBOUND.selectedId) || null;
 }
 
+// 검색어(SKU코드 · 상품명)에 맞는 줄만 남긴다. 검색어가 없으면 전부.
+function filterNewInboundItems(items){
+  const q = String(NEW_INBOUND.query || '').trim().toLowerCase();
+  if (!q) return items;
+  return items.filter(item => `${item.sku_code || ''}\n${item.product_name || ''}`.toLowerCase().includes(q));
+}
+
+// 검색으로 가려진 줄이 선택된 채 남지 않도록, 보이는 줄 중 첫 줄로 선택을 옮긴다.
+function applyNewInboundQuery(value){
+  NEW_INBOUND.query = String(value || '');
+  const visible = filterNewInboundItems(NEW_INBOUND.items || []);
+  if (!visible.some(item => item.id === NEW_INBOUND.selectedId)) {
+    NEW_INBOUND.selectedId = (visible[0] && visible[0].id) || null;
+  }
+  renderNewInboundTable();
+}
+
 function updateNewInboundActionButtons(){
   const dlg = document.getElementById('dlgNewInbound');
   if (!dlg) return;
@@ -1463,9 +1481,13 @@ function renderNewInboundTable(){
   if (!tbody || !meta) return;
 
   tbody.innerHTML = '';
-  const items = NEW_INBOUND.items || [];
-  meta.textContent = items.length
-    ? `${items.length.toLocaleString('ko-KR')}건 · ${dlg.dataset.sourceName || '저장된 리스트'}`
+  const all = NEW_INBOUND.items || [];
+  const items = filterNewInboundItems(all);
+  const countText = items.length === all.length
+    ? `${all.length.toLocaleString('ko-KR')}건`
+    : `${all.length.toLocaleString('ko-KR')}건 중 ${items.length.toLocaleString('ko-KR')}건`;
+  meta.textContent = all.length
+    ? `${countText} · ${dlg.dataset.sourceName || '저장된 리스트'}`
     : '저장된 리스트가 없습니다.';
 
   for (const item of items) {
@@ -1491,7 +1513,8 @@ function renderNewInboundTable(){
 
   if (!items.length) {
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="4" class="muted" style="text-align:center;">선택한 날짜에 저장된 신규입고리스트가 없습니다.</td>';
+    tr.innerHTML = `<td colspan="4" class="muted" style="text-align:center;">${
+      all.length ? '검색한 상품이 이 리스트에 없습니다.' : '선택한 날짜에 저장된 신규입고리스트가 없습니다.'}</td>`;
     tbody.append(tr);
   }
 
@@ -1502,9 +1525,10 @@ async function fetchNewInboundList(dateText){
   const data = await getJSON(`${API_BASE}/new_inbound_list?date=${encodeURIComponent(dateText)}`);
   NEW_INBOUND.date = data.date || dateText;
   NEW_INBOUND.items = data.items || [];
-  NEW_INBOUND.selectedId = (NEW_INBOUND.items || []).some(item => item.id === NEW_INBOUND.selectedId)
+  const visible = filterNewInboundItems(NEW_INBOUND.items);
+  NEW_INBOUND.selectedId = visible.some(item => item.id === NEW_INBOUND.selectedId)
     ? NEW_INBOUND.selectedId
-    : ((NEW_INBOUND.items[0] && NEW_INBOUND.items[0].id) || null);
+    : ((visible[0] && visible[0].id) || null);
   const dlg = document.getElementById('dlgNewInbound');
   if (dlg) dlg.dataset.sourceName = data.source_name || '저장된 리스트';
   renderNewInboundTable();
@@ -1588,6 +1612,8 @@ function ensureNewInboundDialog(){
           <button id="newInboundImport" type="button" class="btn-sm">불러오기</button>
           <button id="newInboundReset" type="button" class="btn-sm">초기화</button>
           <input id="newInboundFile" type="file" accept=".xlsx,.xlsm,.xltx,.xltm" hidden />
+          <input id="newInboundQuery" type="search" class="new-inbound-query" placeholder="SKU코드 · 상품명" aria-label="목록 내 검색" autocomplete="off" />
+          <button type="button" class="btn-sm" data-scan-for="#newInboundQuery" title="사진으로 코드 읽기" aria-label="사진으로 코드 읽기">📷</button>
           <div id="newInboundSource" class="muted"></div>
         </div>
         <div class="new-inbound-table-wrap">
@@ -1649,6 +1675,11 @@ function ensureNewInboundDialog(){
 
     resetBtn?.addEventListener('click', ()=>{
       resetNewInboundDate().catch(err=>alert(err.message || err));
+    });
+
+    // 사진으로 읽은 코드도 input 이벤트로 들어온다(scan.js).
+    dlg.querySelector('#newInboundQuery')?.addEventListener('input', (ev)=>{
+      applyNewInboundQuery(ev.target.value);
     });
 
     fileInput?.addEventListener('change', ()=>{

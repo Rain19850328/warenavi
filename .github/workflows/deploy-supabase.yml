@@ -28,6 +28,10 @@ jobs:
       SUPABASE_PROJECT_URL: ${{ vars.SUPABASE_PROJECT_URL || secrets.SUPABASE_PROJECT_URL }}
       PUBLIC_SITE_ORIGIN: ${{ vars.PUBLIC_SITE_ORIGIN || secrets.PUBLIC_SITE_ORIGIN }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      PLAYAUTO_API_KEY: ${{ secrets.PLAYAUTO_API_KEY }}
+      PLAYAUTO_EMAIL: ${{ secrets.PLAYAUTO_EMAIL }}
+      PLAYAUTO_PASSWORD: ${{ secrets.PLAYAUTO_PASSWORD }}
+      PLAYAUTO_DEPOT_NO: ${{ vars.PLAYAUTO_DEPOT_NO || secrets.PLAYAUTO_DEPOT_NO }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,6 +70,20 @@ jobs:
             supabase secrets set ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" --project-ref "${{ steps.validate.outputs.project_id }}"
           else
             echo "ANTHROPIC_API_KEY is empty. Skipping photo search secret sync."
+          fi
+          # 확인요청 '반영' 시 플레이오토로 재고를 보내는 키. 등록돼 있지 않으면 반영 건이 "전송 대기"로만 남는다.
+          if [ -n "$PLAYAUTO_API_KEY" ] && [ -n "$PLAYAUTO_EMAIL" ] && [ -n "$PLAYAUTO_PASSWORD" ]; then
+            supabase secrets set \
+              PLAYAUTO_API_KEY="$PLAYAUTO_API_KEY" \
+              PLAYAUTO_EMAIL="$PLAYAUTO_EMAIL" \
+              PLAYAUTO_PASSWORD="$PLAYAUTO_PASSWORD" \
+              --project-ref "${{ steps.validate.outputs.project_id }}"
+            # 배송처 코드는 플레이오토 조회 결과를 먼저 쓰므로 없어도 된다.
+            if [ -n "$PLAYAUTO_DEPOT_NO" ]; then
+              supabase secrets set PLAYAUTO_DEPOT_NO="$PLAYAUTO_DEPOT_NO" --project-ref "${{ steps.validate.outputs.project_id }}"
+            fi
+          else
+            echo "PLAYAUTO_* secrets are empty. Skipping PlayAuto secret sync."
           fi
 
       - name: Deploy Edge Function

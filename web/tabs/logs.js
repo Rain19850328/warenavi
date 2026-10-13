@@ -101,6 +101,19 @@
     stock_check_reset: () => ['재고확인', 'muted', 'stockcheck', '확인 취소'],
     stock_check_resolve: d => ['재고확인', 'ok', 'stockcheck', joinParts(['처리완료', d.note])],
     stock_check_reopen: () => ['재고확인', 'warn', 'stockcheck', '처리 취소'],
+    stock_check_review: d => {
+      const decision = text(d.decision);
+      const label = { applied: '반영', held: '보류', rejected: '미반영', pending: '판단 취소' }[decision] || decision;
+      const tone = { applied: 'ok', held: 'warn', rejected: 'muted', pending: 'warn' }[decision] || 'muted';
+      return ['확인요청', tone, 'stockcheck',
+        joinParts([`${label}: DB ${count(d.db_stock)} / 실재고 ${count(d.counted_qty)}`, d.note])];
+    },
+    stock_check_playauto: d => {
+      const status = text(d.status);
+      const label = { sent: '플레이오토 전송 완료', failed: '플레이오토 전송 실패', pending: '플레이오토 전송 대기' }[status] || status;
+      const tone = { sent: 'ok', failed: 'danger', pending: 'warn' }[status] || 'muted';
+      return ['확인요청', tone, 'stockcheck', joinParts([`${label} (실재고 ${count(d.counted_qty)})`, d.message])];
+    },
     display_request: d => ['진열보충', 'info', 'display', joinParts(['진열 요청', d.note])],
     display_done: d => ['진열보충', 'ok', 'display', joinParts(['진열 완료', d.rack_code ? `${text(d.rack_code)}에서 ${count(d.qty)}개 차감` : ''])],
     display_reopen: d => ['진열보충', 'warn', 'display', joinParts(['완료 취소', d.rack_code ? `${text(d.rack_code)}에 ${count(d.qty)}개 되돌림` : ''])],

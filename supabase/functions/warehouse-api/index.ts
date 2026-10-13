@@ -31,6 +31,9 @@ const ROUTE_MIN_ROLE: Record<string, Role> = {
   "POST /new_inbound_list/process": "admin",
   "POST /stock_status": "admin",
   "POST /soldout_items/remove": "admin",
+  "GET /stock_reviews": "admin",
+  "POST /stock_reviews/decide": "admin",
+  "POST /stock_reviews/send": "admin",
   "GET /action_logs": "manager",
   "GET /users": "admin",
   "POST /users/role": "admin",
@@ -125,6 +128,113 @@ async function callRpc(name: string, args: Record<string, unknown> = {}) {
   const { data, error } = await supabase.rpc(name, args);
   if (error) throw new Error(error.message || "요청을 처리하지 못했습니다.");
   return data;
+}
+
+// ---- 플레이오토: 확인요청에서 반영한 실재고를 SKU 재고로 보낸다 ----
+// 주소 · 본문 모양은 PageMaker(backend/agents/publisher/playauto.py)에서 실측으로 확인한 것과 같다.
+// 재고는 실재고(stock_cnt_real)만 바꾼다. 안전재고는 그대로 두되 실재고를 넘으면 실재고에 맞춘다(넘을 수 없는 규칙).
+const PLAYAUTO_API = "https://openapi.playauto.io/api";
+type PlayautoResult = { status: "sent" | "failed" | "pending"; message: string };
+const playautoToken = { token: "", date: "" };   // 하루치 토큰을 재사용한다
+
+function playautoKeys() {
+  return {
+    apiKey: (Deno.env.get("PLAYAUTO_API_KEY") ?? "").trim(),
+    email: (Deno.env.get("PLAYAUTO_EMAIL") ?? "").trim(),
+    password: Deno.env.get("PLAYAUTO_PASSWORD") ?? "",
+  };
+}
+
+async function playautoAuth(force = false): Promise<string> {
+  const today = new Date().toISOString().slice(0, 10);
+  if (!force && playautoToken.token && playautoToken.date === today) return playautoToken.token;
+  const keys = playautoKeys();
+  const res = await fetch(`${PLAYAUTO_API}/auth`, {
+    method: "POST",
+    headers: { "x-api-key": keys.apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: keys.email, password: keys.password }),
+  });
+  const body = await res.json().catch(() => null);
+  const token = Array.isArray(body) && body[0] && typeof body[0].token === "string" ? body[0].token : "";
+  if (!res.ok || !token) throw new Error(`플레이오토 인증 실패 (HTTP ${res.status})`);
+  playautoToken.token = token;
+  playautoToken.date = today;
+  return token;
+}
+
+// 토큰이 만료됐으면 한 번만 다시 받아 재시도한다.
+async function playautoCall(method: "POST" | "PUT", path: string, body: unknown): Promise<Record<string, unknown>> {
+  const send = async (token: string) =>
+    await fetch(`${PLAYAUTO_API}${path}`, {
+      method,
+      headers: {
+        "x-api-key": playautoKeys().apiKey,
+        "Authorization": `Token ${token}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify(body),
+    });
+  let res = await send(await playautoAuth());
+  if (res.status === 401 || res.status === 403) res = await send(await playautoAuth(true));
+  const data = await res.json().catch(() => null);
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error(`플레이오토 응답을 읽지 못했습니다 (HTTP ${res.status})`);
+  }
+  return data as Record<string, unknown>;
+}
+
+async function playautoLookup(sku: string): Promise<Record<string, unknown> | null> {
+  const data = await playautoCall("POST", "/stock/condition", {
+    start: 0,
+    limit: 5,
+    search_key: "sku_cd",
+    search_word: sku,
+    search_type: "exact",
+  });
+  const rows = Array.isArray(data.results) ? data.results as Record<string, unknown>[] : [];
+  return rows.find((row) => String(row?.sku_cd ?? "") === sku) ?? null;
+}
+
+// 던지지 않는다. 못 보냈으면 이유를 message 로 돌려준다.
+async function sendStockToPlayauto(itemCode: unknown, countedQty: unknown): Promise<PlayautoResult> {
+  const keys = playautoKeys();
+  if (!keys.apiKey || !keys.email || !keys.password) {
+    return { status: "pending", message: "플레이오토 연동 정보가 서버에 등록되지 않았습니다" };
+  }
+  const sku = String(itemCode ?? "").trim();
+  const qty = Number(countedQty);
+  if (!sku || !Number.isInteger(qty) || qty < 0) {
+    return { status: "failed", message: "보낼 상품코드 또는 실재고 수량이 올바르지 않습니다" };
+  }
+  try {
+    const current = await playautoLookup(sku);
+    if (!current) return { status: "failed", message: `플레이오토에 등록되지 않은 SKU입니다 (${sku})` };
+    const depotNo = Number(current.depot_no) || Number(Deno.env.get("PLAYAUTO_DEPOT_NO"));
+    if (!depotNo) return { status: "failed", message: "플레이오토 배송처 코드를 알 수 없습니다" };
+    const safe = Math.min(Math.max(0, Number(current.stock_cnt_safe) || 0), qty);
+
+    const res = await playautoCall("PUT", "/stock/edit/v1.2", {
+      sku_cd: sku,
+      depots: [{ depot_no: depotNo, real_stock: qty, safe_stock: safe }],
+    });
+    if (String(res.result ?? "") === "실패" || res.error_code) {
+      const messages = Array.isArray(res.messages) ? res.messages.filter(Boolean).join(" ") : "";
+      return { status: "failed", message: (messages || JSON.stringify(res)).slice(0, 300) };
+    }
+
+    // 보낸 값이 실제로 들어갔는지 다시 읽어 확인한다.
+    const after = await playautoLookup(sku);
+    const now = after ? Number(after.stock_cnt_real) : NaN;
+    if (now !== qty) {
+      return {
+        status: "failed",
+        message: `전송했지만 플레이오토 실재고가 ${Number.isFinite(now) ? now : "확인 불가"}(으)로 조회됩니다 (보낸 값 ${qty})`,
+      };
+    }
+    return { status: "sent", message: `실재고 ${Number(current.stock_cnt_real)} → ${qty}` };
+  } catch (err) {
+    return { status: "failed", message: String((err as Error)?.message || err).slice(0, 300) };
+  }
 }
 
 const roleCache = new WeakMap<AuthContext, Promise<RoleInfo>>();
@@ -923,6 +1033,70 @@ Deno.serve(async (req) => {
           p_id: getUuidParam(payload.id, "재고확인 항목"),
           p_resolved: payload.resolved,
           p_note: String(payload.note ?? ""),
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    // ---- 확인요청 (불일치 건을 관리자가 반영 / 보류 / 미반영으로 판단) ----
+    if (req.method === "GET" && path === "/stock_reviews") {
+      return json(
+        req,
+        await callRpc("warehouse_get_stock_review_list", {
+          p_scope: url.searchParams.get("scope") === "done" ? "done" : "open",
+        }),
+      );
+    }
+
+    if (req.method === "POST" && path === "/stock_reviews/decide") {
+      const payload = await readBody(req);
+      const decision = String(payload.decision ?? "").trim();
+      if (!["applied", "held", "rejected", "pending"].includes(decision)) {
+        throw new Error("판단 값이 올바르지 않습니다.");
+      }
+      const id = getUuidParam(payload.id, "확인요청 항목");
+      const decided = await callRpc("warehouse_review_stock_check", {
+        p_id: id,
+        p_decision: decision,
+        p_note: String(payload.note ?? ""),
+        p_actor_user_id: auth.userId,
+        p_actor_email: auth.email,
+        p_actor_name: auth.name,
+      }) as { item?: Record<string, unknown> };
+      // 반영이면 판단을 먼저 남기고 플레이오토로 보낸다. 전송이 실패해도 판단은 남고, 화면에서 다시 보낼 수 있다.
+      const item = decided?.item;
+      if (decision !== "applied" || !item || item.playauto_status === "sent") return json(req, decided);
+      const sent = await sendStockToPlayauto(item.item_code, item.counted_qty);
+      return json(
+        req,
+        await callRpc("warehouse_set_stock_check_playauto", {
+          p_id: id,
+          p_status: sent.status,
+          p_message: sent.message,
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    // 전송 대기 · 실패로 남은 반영 건을 다시 보낸다.
+    if (req.method === "POST" && path === "/stock_reviews/send") {
+      const payload = await readBody(req);
+      const id = getUuidParam(payload.id, "확인요청 항목");
+      const item = await callRpc("warehouse_get_stock_check_item", { p_id: id }) as Record<string, unknown> | null;
+      if (!item) throw new Error("확인요청 항목을 찾을 수 없습니다.");
+      if (item.review_status !== "applied") throw new Error("반영으로 판단한 항목만 플레이오토로 보낼 수 있습니다.");
+      if (item.playauto_status === "sent") throw new Error("이미 플레이오토로 전송된 건입니다.");
+      const sent = await sendStockToPlayauto(item.item_code, item.counted_qty);
+      return json(
+        req,
+        await callRpc("warehouse_set_stock_check_playauto", {
+          p_id: id,
+          p_status: sent.status,
+          p_message: sent.message,
           p_actor_user_id: auth.userId,
           p_actor_email: auth.email,
           p_actor_name: auth.name,

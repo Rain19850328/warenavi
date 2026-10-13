@@ -31,6 +31,7 @@
     filter: 'all',
     seq: 0,              // 늦게 도착한 응답 무시용
     note: null,          // 열려 있는 요청 메모칸 {id(묶음), line(상품 줄), kind, text}
+    open: new Set(),     // 펼쳐 둔 합포장 묶음 id (합포장 2종 이상은 접힌 채로 시작한다)
     rendering: false,    // 목록을 통째로 다시 그리는 중(이때 생기는 focusout 무시)
   };
 
@@ -57,6 +58,13 @@
   function findLine(b, lineId) { return linesOf(b).find(l => String(l.id) === String(lineId)); }
   function bundleLabel(b) {
     return `묶음 ${String(b.bundle_no ?? '').trim() || '-'}`;
+  }
+  // 합포장(상품 2종 이상) 묶음만 접을 수 있다. 요청 메모를 적는 중인 묶음은 펼쳐 둔다.
+  function canFold(b) { return linesOf(b).length > 1; }
+  function isFolded(b) {
+    if (!canFold(b)) return false;
+    if (state.note && String(state.note.id) === String(b.id)) return false;
+    return !state.open.has(String(b.id));
   }
   function rowEl(id) {
     if (!state.els.body) return null;
@@ -119,7 +127,12 @@
 .tab-irregular .irr-side .irr-req{ display:flex; align-items:center; justify-content:center; gap:4px; width:100%; min-height:40px; padding:0 6px; font-size:13px; white-space:nowrap; }
 .tab-irregular .irr-bundle-actions{ padding-top:10px; border-top:1px solid #e2e8f0; }
 .tab-irregular .irr-loc{ font-size:20px; font-weight:800; line-height:1.25; color:#0f172a; word-break:break-all; }
-.tab-irregular .irr-code{ appearance:none; display:inline-block; min-height:32px; padding:4px 0; border:0; background:none; color:#0369a1; font:inherit; font-size:13px; text-decoration:underline; text-align:left; cursor:pointer; }
+.tab-irregular .irr-name{ appearance:none; display:block; width:100%; min-height:32px; padding:4px 0; border:0; background:none; font-family:inherit; text-align:left; cursor:pointer; }
+.tab-irregular .irr-fold{ margin-left:auto; min-height:32px; padding:0 10px; font-size:13px; white-space:nowrap; }
+.tab-irregular .wl-row.is-folded .irr-lines{ display:none; }
+.tab-irregular .irr-fold-summary{ display:flex; align-items:baseline; gap:10px; margin-top:6px; }
+.tab-irregular .irr-fold-locs{ flex:1 1 auto; min-width:0; font-size:16px; font-weight:700; color:#0f172a; word-break:break-all; }
+.tab-irregular .irr-fold-qty{ flex:0 0 auto; font-size:16px; font-weight:800; color:#0f172a; white-space:nowrap; }
 .tab-irregular .irr-qty{ font-size:20px; font-weight:800; color:#0f172a; white-space:nowrap; }
 .tab-irregular .wl-row.is-done{ opacity:1; }
 .tab-irregular .wl-row{ display:block; }
@@ -156,14 +169,28 @@
     const changed = b.status_changed_at || b.status_changed_by_name
       ? `<div class="wl-meta">상태 변경: ${esc(b.status_changed_by_name || '-')}${b.status_changed_at ? ' · ' + esc(UI.fmtDateTime(b.status_changed_at)) : ''}</div>`
       : '';
+    const folded = isFolded(b);
+    const fold = canFold(b)
+      ? `<button type="button" class="btn-sm irr-fold" data-act="fold" aria-expanded="${folded ? 'false' : 'true'}">${folded ? '펼치기 ▾' : '접기 ▴'}</button>`
+      : '';
     return `
       <div class="irr-head">
         <span class="irr-title">${esc(bundleLabel(b))}</span>
         ${n > 1 ? UI.chip(`합포장 ${n}종`, 'info') : ''}
         ${UI.chip(status, STATUS_TONE[status])}
         ${b.stale ? UI.chip('주문서에서 제외됨', 'danger') : ''}
+        ${fold}
       </div>
+      ${folded ? foldSummaryHtml(b) : ''}
       ${changed}`;
+  }
+
+  // 접힌 묶음에 보여 줄 한 줄 요약: 위치들과 수량 합계.
+  function foldSummaryHtml(b) {
+    const lines = linesOf(b);
+    const locs = Array.from(new Set(lines.map(l => locText(l.location_code)))).sort(cmp);
+    const qty = lines.reduce((sum, l) => sum + (Number(l.qty) || 0), 0);
+    return `<div class="irr-fold-summary"><span class="irr-fold-locs">${esc(locs.join(' · '))}</span><span class="irr-fold-qty">총 ${esc(UI.num(qty))}개</span></div>`;
   }
 
   function statusHtml(b) {
@@ -198,8 +225,7 @@
         <div class="irr-line-body">
           <div class="irr-info">
             <div class="irr-loc">${esc(locText(line.location_code))}</div>
-            <button type="button" class="wl-code irr-code" data-act="open-item">${esc(line.item_code)}</button>
-            <div class="wl-name">${esc(line.item_name)}</div>
+            <button type="button" class="wl-name irr-name" data-act="open-item" title="상품조회에서 보기">${esc(line.item_name || line.item_code)}</button>
             <div class="wl-meta"><span>재고 ${esc(UI.num(line.stock_today))}</span> ${UI.rackChips(line.racks)}</div>
           </div>
           <div class="irr-side">
@@ -218,7 +244,7 @@
   function rowHtml(b) {
     const box = toInt(b.expected_box_count);
     return `
-      <li class="wl-row${b.status === '포장완료' ? ' is-done' : ''}" data-id="${esc(b.id)}">
+      <li class="wl-row${b.status === '포장완료' ? ' is-done' : ''}${isFolded(b) ? ' is-folded' : ''}" data-id="${esc(b.id)}">
         <div data-part="head">${headHtml(b)}</div>
         <ul class="irr-lines" data-part="lines">${linesHtml(b)}</ul>
         <div class="wl-actions irr-bundle-actions">
@@ -329,6 +355,7 @@
     const prevNote = li.querySelector('input[data-role="note"]');
     if (state.note && prevNote) state.note.text = prevNote.value;
     li.classList.toggle('is-done', b.status === '포장완료');
+    li.classList.toggle('is-folded', isFolded(b));
     const set = (part, html) => {
       const el = li.querySelector(`[data-part="${part}"]`);
       if (el) el.innerHTML = html;
@@ -525,7 +552,12 @@
     }
     const id = rowIdOf(btn);
     if (id === null) return;
-    if (act === 'open-item') {
+    if (act === 'fold') {
+      const b = findBundle(id);
+      if (!b) return;
+      if (isFolded(b)) state.open.add(String(id)); else state.open.delete(String(id));
+      patchRow(b);
+    } else if (act === 'open-item') {
       const b = findBundle(id);
       const line = b && findLine(b, lineIdOf(btn));
       if (line) Shell.show('items', { code: line.item_code });

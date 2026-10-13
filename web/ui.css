@@ -307,6 +307,7 @@ dialog.ui-confirm .ui-confirm__actions button{ min-height: 44px; font-size: 15px
 #view-newinbound .view-head .new-inbound-date-field{ font-size: 0; gap: 0; }   /* '날짜' 글자는 숨기고 칸만 */
 #view-newinbound .view-head .new-inbound-date-field input[type="date"]{ min-width: 0; }
 #view-newinbound .new-inbound-toolbar #newInboundSource{ flex: 1 1 100%; font-size: 12px; }
+#view-newinbound .new-inbound-toolbar .new-inbound-query{ flex: 1 1 160px; }
 #view-newinbound .new-inbound-table-wrap{ padding: 0; overflow-x: auto; }
 #view-newinbound #tblNewInbound tbody tr{ cursor: pointer; }
 #view-newinbound .new-inbound-actions{

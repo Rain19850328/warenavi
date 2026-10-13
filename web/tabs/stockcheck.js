@@ -211,6 +211,9 @@
     if (r.status === 'match' || r.status === 'mismatch') {
       parts.push(UI.chip(r.status === 'match' ? '일치' : '불일치', r.status === 'match' ? 'ok' : 'danger'));
       if (r.status === 'mismatch' && r.resolved) parts.push(UI.chip('처리완료', 'ok'));
+      // 관리자가 확인요청 탭에서 내린 판단
+      const review = { applied: ['반영', 'ok'], held: ['보류', 'warn'], rejected: ['미반영', 'muted'] }[r.review_status];
+      if (r.status === 'mismatch' && review) parts.push(UI.chip(review[0], review[1]));
       const counted = numOrNull(r.counted_qty);
       const db = numOrNull(r.db_stock);
       if (counted !== null) {

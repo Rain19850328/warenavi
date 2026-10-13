@@ -13,6 +13,7 @@
     { id: 'newinbound', label: '신규입고', min: 'admin' },
     { id: 'map', label: '창고네비', min: 'manager' },
     { id: 'soldout', label: '품절관리', min: 'admin' },
+    { id: 'review', label: '확인요청', min: 'admin' },
     { id: 'logs', label: '작업로그', min: 'manager' },
     { id: 'users', label: '권한설정', min: 'admin' },
   ];
@@ -315,6 +316,7 @@
       setBadge('stockcheck', n(c.stock_check_pending) + n(c.mismatch_open));
       setBadge('display', n(c.display_open));
       setBadge('irregular', n(c.irregular_open));
+      setBadge('review', n(c.review_open));
       // 뱃지가 처음 붙으면 탭 폭이 늘어나 끝쪽 활성 탭이 화면 밖으로 밀린다 → 한 번만 다시 맞춘다.
       if (!state.badgeRevealed) { state.badgeRevealed = true; revealActiveTab(); }
     } catch (_) {
