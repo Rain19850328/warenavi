@@ -1,6 +1,6 @@
 // tabs/irregular.js — 이형포장 탭
 // MOPS가 엑셀 출력 시 저장한 그날의 이형 묶음(주문 1건 = 카드 1장)을 포장 담당자가 위에서부터 처리한다.
-// 작업 상태·예상박스는 묶음에 한 번, 진열 요청은 묶음 안 상품마다 둔다.
+// 작업 상태는 묶음에 한 번, 진열 요청은 묶음 안 상품마다 둔다.
 (function () {
   'use strict';
 
@@ -28,7 +28,6 @@
     seq: 0,              // 늦게 도착한 응답 무시용
     note: null,          // 열려 있는 요청 메모칸 {id(묶음), line(상품 줄), kind, text}
     open: new Set(),     // 펼쳐 둔 합포장 묶음 id (합포장 2종 이상은 접힌 채로 시작한다)
-    rendering: false,    // 목록을 통째로 다시 그리는 중(이때 생기는 focusout 무시)
   };
 
   const esc = v => UI.esc(v);
@@ -58,6 +57,15 @@
     const n = toInt(b && b.box_no);
     return n !== null && n > 0 ? n : null;
   }
+  // 주문서(수집 회차) 목록: 박스 번호가 앞선 것부터. 이 순서로 번호 표시 색을 정한다(연파랑 → 연빨강 → 연노랑 …).
+  const BATCH_TONES = 5;
+  function batchKeys() {
+    return Array.from(new Set(sortBundles(state.bundles).map(b => String(b.batch_key ?? ''))));
+  }
+  function batchTone(b) {
+    const i = batchKeys().indexOf(String(b.batch_key ?? ''));
+    return (i < 0 ? 0 : i) % BATCH_TONES;
+  }
   function bundleLabel(b) {
     const n = boxNo(b);
     return n === null ? '-' : String(n).padStart(2, '0');
@@ -82,10 +90,6 @@
     const line = el && el.closest ? el.closest('.irr-line') : null;
     return line ? line.dataset.line : null;
   }
-  function boxInput(id) {
-    const li = rowEl(id);
-    return li ? li.querySelector('input[data-role="box"]') : null;
-  }
   function noteInput() {
     return state.els.body ? state.els.body.querySelector('input[data-role="note"]') : null;
   }
@@ -109,12 +113,18 @@
     style.textContent = `
 .tab-irregular .irr-summary{ margin:0 0 10px; padding:8px 10px; border-radius:10px; background:#f1f5f9; font-size:13px; line-height:1.6; color:#334155; }
 .tab-irregular .irr-summary b{ color:#0f172a; }
-.tab-irregular .irr-batch{ margin:14px 0 6px; font-size:13px; font-weight:700; color:#475569; word-break:break-all; }
+.tab-irregular .irr-batch{ display:flex; align-items:center; gap:6px; margin:14px 0 6px; font-size:13px; font-weight:700; color:#475569; word-break:break-all; }
 .tab-irregular .irr-batch:first-child{ margin-top:0; }
+.tab-irregular .irr-batch-dot{ flex:0 0 auto; width:12px; height:12px; border-radius:50%; border:1px solid; }
+.tab-irregular .irr-tone-0{ background:#bfdbfe; border-color:#60a5fa; color:#1e3a8a; }
+.tab-irregular .irr-tone-1{ background:#fecaca; border-color:#f87171; color:#7f1d1d; }
+.tab-irregular .irr-tone-2{ background:#fde68a; border-color:#fbbf24; color:#713f12; }
+.tab-irregular .irr-tone-3{ background:#bbf7d0; border-color:#4ade80; color:#14532d; }
+.tab-irregular .irr-tone-4{ background:#ddd6fe; border-color:#a78bfa; color:#4c1d95; }
 .tab-irregular .irr-head{ display:flex; flex-wrap:nowrap; align-items:center; gap:6px; }
 .tab-irregular .irr-head > *{ flex:0 0 auto; white-space:nowrap; }
-.tab-irregular .irr-title{ display:inline-flex; align-items:baseline; gap:4px; padding:4px 10px; border-radius:8px; background:#0284c7; color:#fff; font-size:24px; font-weight:800; line-height:1.1; letter-spacing:.5px; }
-.tab-irregular .irr-title small{ font-size:12px; font-weight:700; letter-spacing:0; color:#e0f2fe; }
+.tab-irregular .irr-title{ display:inline-flex; align-items:baseline; gap:4px; padding:4px 10px; border-width:1px; border-style:solid; border-radius:8px; font-size:24px; font-weight:800; line-height:1.1; letter-spacing:.5px; }
+.tab-irregular .irr-title small{ font-size:12px; font-weight:700; letter-spacing:0; opacity:.75; }
 .tab-irregular .irr-lines{ margin:8px 0 0; padding:0; list-style:none; }
 .tab-irregular .irr-line{ padding:10px 0; border-top:1px solid #e2e8f0; }
 .tab-irregular .irr-line-body{ display:flex; align-items:flex-start; gap:10px; }
@@ -143,12 +153,6 @@
 .tab-irregular .irr-status > button.is-active[data-value="대기"]{ background:#64748b; }
 .tab-irregular .irr-status > button.is-active[data-value="작업중"]{ background:#d97706; }
 .tab-irregular .irr-status > button.is-active[data-value="포장완료"]{ background:#16a34a; }
-.tab-irregular .irr-box{ display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; color:#334155; }
-.tab-irregular .irr-box input{ width:76px; height:40px; padding:0 8px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#0f172a; font:inherit; font-size:16px; text-align:right; }
-.tab-irregular .irr-box input:focus{ outline:none; border-color:#38bdf8; box-shadow:0 0 0 3px rgba(56,189,248,.25); }
-.tab-irregular .irr-box input:disabled{ background:#f1f5f9; color:#64748b; }
-.tab-irregular .irr-tick{ width:14px; color:#16a34a; font-weight:700; opacity:0; transition:opacity .2s ease; }
-.tab-irregular .irr-tick.is-on{ opacity:1; }
 .tab-irregular .irr-req.is-requested{ background:#e0f2fe; border-color:#7dd3fc; color:#075985; }
 .tab-irregular .irr-note{ display:flex; margin-top:8px; flex-wrap:wrap; align-items:center; gap:8px; padding-top:8px; border-top:1px dashed #e2e8f0; }
 .tab-irregular .irr-note[hidden]{ display:none; }
@@ -173,7 +177,7 @@
     // 번호 · 상태 · 접기 버튼은 항상 한 줄에 둔다. 길어질 수 있는 '제외됨' 표시는 아랫줄로 내린다.
     return `
       <div class="irr-head">
-        <span class="irr-title" title="묶음 ${esc(String(b.bundle_no ?? '').trim() || '-')}"><small>NO.</small>${esc(bundleLabel(b))}</span>
+        <span class="irr-title irr-tone-${batchTone(b)}" title="묶음 ${esc(String(b.bundle_no ?? '').trim() || '-')}"><small>NO.</small>${esc(bundleLabel(b))}</span>
         ${UI.chip(status, STATUS_TONE[status])}
         ${fold}
       </div>
@@ -237,18 +241,12 @@
   }
 
   function rowHtml(b) {
-    const box = toInt(b.expected_box_count);
     return `
       <li class="wl-row${b.status === '포장완료' ? ' is-done' : ''}${isFolded(b) ? ' is-folded' : ''}" data-id="${esc(b.id)}">
         <div data-part="head">${headHtml(b)}</div>
         <ul class="irr-lines" data-part="lines">${linesHtml(b)}</ul>
         <div class="wl-actions irr-bundle-actions">
           <div class="seg irr-status" data-part="status" role="group" aria-label="묶음 작업 상태">${statusHtml(b)}</div>
-          <label class="irr-box">예상박스
-            <input type="text" data-role="box" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"
-                   placeholder="-" aria-label="예상박스수량" value="${box === null ? '' : esc(box)}" />
-            <span class="irr-tick" data-role="tick" aria-hidden="true">✓</span>
-          </label>
         </div>
       </li>`;
   }
@@ -258,19 +256,16 @@
     const el = state.els.summary;
     if (!el) return;
     if (!state.loaded || !state.bundles.length) { el.hidden = true; el.innerHTML = ''; return; }
-    let qty = 0, boxes = 0, missing = 0;
+    let qty = 0;
     const count = { '대기': 0, '작업중': 0, '포장완료': 0 };
     for (const b of state.bundles) {
       for (const line of linesOf(b)) qty += Number(line.qty) || 0;
-      const box = toInt(b.expected_box_count);
-      if (box === null) missing += 1; else boxes += box;
       if (count[b.status] !== undefined) count[b.status] += 1;
     }
     el.hidden = false;
     el.innerHTML =
       `총 <b>${esc(UI.num(state.bundles.length))}</b>묶음 · 수량 합계 <b>${esc(UI.num(qty))}</b> · ` +
-      `대기 <b>${count['대기']}</b> / 작업중 <b>${count['작업중']}</b> / 포장완료 <b>${count['포장완료']}</b> · ` +
-      `예상박스 합계 <b>${esc(UI.num(boxes))}</b>${missing ? ` (미입력 ${esc(UI.num(missing))}건)` : ''}`;
+      `대기 <b>${count['대기']}</b> / 작업중 <b>${count['작업중']}</b> / 포장완료 <b>${count['포장완료']}</b>`;
   }
 
   function renderFilter() {
@@ -296,43 +291,32 @@
     const shown = state.filter === 'all' ? state.bundles : state.bundles.filter(b => b.status === state.filter);
     if (!shown.length) return `<p class="empty">'${esc(state.filter)}' 상태인 묶음이 없습니다.</p>`;
 
-    // 주문서가 여러 개면 번호가 앞선 주문서부터 보여 준다.
-    const batches = Array.from(new Set(sortBundles(state.bundles).map(b => String(b.batch_key ?? ''))));
+    // 주문서(수집 회차)가 여러 개면 번호가 앞선 주문서부터 나눠 보여 준다. 번호 표시 색도 주문서마다 다르다.
+    const batches = batchKeys();
     if (batches.length <= 1) {
       return `<ul class="wl-list">${sortBundles(shown).map(rowHtml).join('')}</ul>`;
     }
-    return batches.map(key => {
+    return batches.map((key, i) => {
       const rows = sortBundles(shown.filter(b => String(b.batch_key ?? '') === key));
       if (!rows.length) return '';
-      return `<h3 class="irr-batch">${esc(key || '(주문서 이름 없음)')} · ${rows.length}묶음</h3>
+      return `<h3 class="irr-batch"><span class="irr-batch-dot irr-tone-${i % BATCH_TONES}" aria-hidden="true"></span>${esc(key || '(주문서 이름 없음)')} · ${rows.length}묶음</h3>
         <ul class="wl-list">${rows.map(rowHtml).join('')}</ul>`;
     }).join('');
   }
 
-  // 목록 전체를 다시 그린다. 입력 중이던 예상박스 값·메모는 가능한 한 되살린다.
+  // 목록 전체를 다시 그린다. 입력 중이던 메모는 가능한 한 되살린다.
   function renderList() {
     const body = state.els.body;
     if (!body) return;
     const active = document.activeElement;
-    let keepBox = null;
-    if (active && body.contains(active) && active.matches('input[data-role="box"]')) {
-      keepBox = { id: rowIdOf(active), value: active.value };
-    }
     const noteFocused = !!(active && body.contains(active) && active.matches('input[data-role="note"]'));
     const prevNote = noteInput();
     if (state.note && prevNote) state.note.text = prevNote.value;
 
-    state.rendering = true;
-    try { body.innerHTML = listHtml(); } finally { state.rendering = false; }
+    body.innerHTML = listHtml();
 
     if (state.note && !noteInput()) state.note = null;
-    if (keepBox && keepBox.id) {
-      const input = boxInput(keepBox.id);
-      if (input) {
-        input.value = keepBox.value;
-        try { input.focus({ preventScroll: true }); } catch (_) {}
-      }
-    } else if (noteFocused) {
+    if (noteFocused) {
       const input = noteInput();
       if (input) { try { input.focus({ preventScroll: true }); } catch (_) {} }
     }
@@ -344,7 +328,7 @@
     renderList();
   }
 
-  // 한 묶음만 제자리에서 갱신한다. 예상박스 입력칸은 건드리지 않는다.
+  // 한 묶음만 제자리에서 갱신한다.
   function patchRow(b) {
     const li = rowEl(b.id);
     if (!li) return;
@@ -359,11 +343,6 @@
     set('head', headHtml(b));
     set('lines', linesHtml(b));
     set('status', statusHtml(b));
-    const input = li.querySelector('input[data-role="box"]');
-    if (input && input !== document.activeElement && !input.disabled) {
-      const box = toInt(b.expected_box_count);
-      input.value = box === null ? '' : String(box);
-    }
   }
 
   // 메모칸이 열리거나 닫힌 묶음의 상품 줄을 다시 그린다.
@@ -440,49 +419,6 @@
       const res = await postInOrder('/irregular_items/update', { id: b.id, status: value });
       applyBundle(id, res && res.bundle, { status: value });
     });
-  }
-
-  function flashTick(id) {
-    const li = rowEl(id);
-    const tick = li && li.querySelector('[data-role="tick"]');
-    if (!tick) return;
-    tick.classList.add('is-on');
-    setTimeout(() => tick.classList.remove('is-on'), 1800);
-  }
-
-  async function saveBox(input) {
-    if (state.rendering || input.disabled) return;
-    const id = rowIdOf(input);
-    const b = id === null ? null : findBundle(id);
-    if (!b) return;
-    const prev = toInt(b.expected_box_count);
-    const prevText = prev === null ? '' : String(prev);
-    const raw = input.value.trim();
-    let next;
-    if (raw === '') next = null;
-    else if (/^\d{1,6}$/.test(raw)) next = Number(raw);
-    else {
-      UI.toast('예상박스수량은 0 이상의 숫자로 입력해 주세요', 'error');
-      input.value = prevText;
-      return;
-    }
-    if (next === prev) { input.value = prevText; return; }
-
-    input.disabled = true;
-    const ok = await UI.busy(null, async () => {
-      const res = await postInOrder('/irregular_items/update', { id: b.id, expected_box_count: next });
-      applyBundle(id, res && res.bundle, { expected_box_count: next });
-      return true;
-    });
-    input.disabled = false;
-    // 저장 중 목록이 다시 그려졌을 수 있으므로 지금 화면의 입력칸을 다시 찾는다.
-    const cur = boxInput(id);
-    const now = findBundle(id);
-    if (cur && cur !== document.activeElement) {
-      const val = now ? toInt(now.expected_box_count) : prev;
-      cur.value = val === null ? '' : String(val);
-    }
-    if (ok) flashTick(id);
   }
 
   function toggleNote(id, lineId, kind) {
@@ -568,23 +504,10 @@
     }
   }
 
-  function onFocusOut(ev) {
-    const input = ev.target;
-    if (input && input.matches && input.matches('input[data-role="box"]')) saveBox(input);
-  }
-
   function onKeyDown(ev) {
     const input = ev.target;
     if (!input || !input.matches || ev.isComposing) return;
-    if (input.matches('input[data-role="box"]')) {
-      if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); }
-      else if (ev.key === 'Escape') {
-        const b = findBundle(rowIdOf(input));
-        const prev = b ? toInt(b.expected_box_count) : null;
-        input.value = prev === null ? '' : String(prev);
-        input.blur();
-      }
-    } else if (input.matches('input[data-role="note"]')) {
+    if (input.matches('input[data-role="note"]')) {
       if (ev.key === 'Enter') {
         ev.preventDefault();
         const line = input.closest('.irr-line');
@@ -625,7 +548,6 @@
       },
     });
     root.addEventListener('click', onClick);
-    root.addEventListener('focusout', onFocusOut);
     root.addEventListener('keydown', onKeyDown);
     renderAll();
   }
