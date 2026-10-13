@@ -1,6 +1,6 @@
 // tabs/irregular.js — 이형포장 탭
 // MOPS가 엑셀 출력 시 저장한 그날의 이형 묶음(주문 1건 = 카드 1장)을 포장 담당자가 위에서부터 처리한다.
-// 작업 상태·예상박스는 묶음에 한 번, 재고확인·진열 요청은 묶음 안 상품마다 둔다.
+// 작업 상태·예상박스는 묶음에 한 번, 진열 요청은 묶음 안 상품마다 둔다.
 (function () {
   'use strict';
 
@@ -8,13 +8,9 @@
   const STATUS_TONE = { '대기': 'muted', '작업중': 'warn', '포장완료': 'ok' };
   const FILTERS = [['all', '전체'], ['대기', '대기'], ['작업중', '작업중'], ['포장완료', '포장완료']];
   const REQUESTS = {
-    stock: {
-      path: '/stock_checks/request', key: 'stock_check',
-      label: '재고확인 요청', icon: '🔍', short: '재고확인', okMsg: '재고확인 리스트에 추가했습니다',
-    },
     display: {
       path: '/display_requests/request', key: 'display',
-      label: '진열 요청', icon: '📦', short: '진열', okMsg: '진열보충 리스트에 추가했습니다',
+      label: '진열 요청', short: '진열요청', okMsg: '진열보충 리스트에 추가했습니다',
     },
   };
   const EMPTY_TEXT = '이 날짜에 저장된 이형 리스트가 없습니다. MOPS 물류관리에서 엑셀로 출력하면 자동으로 저장됩니다.';
@@ -66,7 +62,7 @@
   function bundleLabel(b) {
     return state.numbers.get(String(b.id)) || '-';
   }
-  // 합포장(상품 2종 이상) 묶음만 접을 수 있다. 접힌 묶음은 첫 상품만 보이고 나머지는 '그 외 N종'으로 줄인다.
+  // 합포장(상품 2종 이상) 묶음만 접을 수 있다. 접힌 묶음은 '첫 로케이션 + 그 외 N종' 한 줄로 줄인다.
   function canFold(b) { return linesOf(b).length > 1; }
   function isFolded(b) {
     return canFold(b) && !state.open.has(String(b.id));
@@ -123,13 +119,13 @@
 .tab-irregular .irr-batch:first-child{ margin-top:0; }
 .tab-irregular .irr-head{ display:flex; flex-wrap:nowrap; align-items:center; gap:6px; }
 .tab-irregular .irr-head > *{ flex:0 0 auto; white-space:nowrap; }
-.tab-irregular .irr-title{ display:inline-flex; align-items:baseline; gap:4px; padding:4px 10px; border-radius:8px; background:#0f172a; color:#fff; font-size:24px; font-weight:800; line-height:1.1; letter-spacing:.5px; }
-.tab-irregular .irr-title small{ font-size:12px; font-weight:700; letter-spacing:0; color:#cbd5e1; }
+.tab-irregular .irr-title{ display:inline-flex; align-items:baseline; gap:4px; padding:4px 10px; border-radius:8px; background:#0284c7; color:#fff; font-size:24px; font-weight:800; line-height:1.1; letter-spacing:.5px; }
+.tab-irregular .irr-title small{ font-size:12px; font-weight:700; letter-spacing:0; color:#e0f2fe; }
 .tab-irregular .irr-lines{ margin:8px 0 0; padding:0; list-style:none; }
 .tab-irregular .irr-line{ padding:10px 0; border-top:1px solid #e2e8f0; }
 .tab-irregular .irr-line-body{ display:flex; align-items:flex-start; gap:10px; }
 .tab-irregular .irr-info{ flex:1 1 auto; min-width:0; }
-.tab-irregular .irr-side{ flex:0 0 auto; display:flex; flex-direction:column; align-items:stretch; gap:6px; width:116px; }
+.tab-irregular .irr-side{ flex:0 0 auto; display:flex; flex-direction:column; align-items:stretch; gap:6px; width:88px; }
 .tab-irregular .irr-side .irr-qty{ text-align:right; }
 .tab-irregular .irr-reqs{ display:flex; gap:4px; }
 .tab-irregular .irr-side .irr-req{ flex:1 1 0; min-width:0; min-height:32px; padding:0 2px; font-size:12px; white-space:nowrap; }
@@ -137,8 +133,10 @@
 .tab-irregular .irr-loc{ font-size:20px; font-weight:800; line-height:1.25; color:#0f172a; word-break:break-all; }
 .tab-irregular .irr-name{ appearance:none; display:block; width:100%; min-height:32px; padding:4px 0; border:0; background:none; font-family:inherit; text-align:left; cursor:pointer; }
 .tab-irregular .irr-head .irr-fold{ margin-left:auto; min-width:40px; min-height:34px; padding:0; font-size:16px; }
-.tab-irregular .irr-more{ padding:0 0 10px; }
-.tab-irregular .irr-more-btn{ appearance:none; display:block; width:100%; min-height:36px; padding:0 10px; border:1px dashed #cbd5e1; border-radius:8px; background:#f8fafc; color:#475569; font-family:inherit; font-size:14px; font-weight:700; text-align:center; cursor:pointer; }
+.tab-irregular .irr-more{ padding:10px 0; border-top:1px solid #e2e8f0; }
+.tab-irregular .irr-more-btn{ appearance:none; display:flex; align-items:baseline; gap:10px; width:100%; min-height:36px; padding:0; border:0; background:none; font-family:inherit; text-align:left; cursor:pointer; }
+.tab-irregular .irr-more-loc{ font-size:20px; font-weight:800; line-height:1.25; color:#0f172a; word-break:break-all; }
+.tab-irregular .irr-more-rest{ flex:0 0 auto; font-size:14px; font-weight:700; color:#64748b; white-space:nowrap; }
 .tab-irregular .irr-qty{ font-size:20px; font-weight:800; color:#0f172a; white-space:nowrap; }
 .tab-irregular .wl-row.is-done{ opacity:1; }
 .tab-irregular .wl-row{ display:block; }
@@ -201,7 +199,7 @@
       const r = REQUESTS[kind];
       const on = !!open[r.key];
       const title = on ? `${r.label}됨` : r.label;
-      // 좁은 버튼이라 아이콘은 빼고, 요청된 상태는 색으로 구분한다.
+      // 요청된 상태는 색으로 구분한다.
       return `<button type="button" class="btn-sm irr-req${on ? ' is-requested' : ''}" data-act="req" data-kind="${kind}" title="${title}" aria-label="${title}">${r.short}</button>`;
     }).join('');
   }
@@ -237,9 +235,11 @@
   function linesHtml(b) {
     const lines = linesOf(b);
     if (!isFolded(b)) return lines.map(line => lineHtml(b, line)).join('');
-    // 접힌 묶음: 첫 상품만 보여 주고, 나머지는 누르면 펼쳐지는 한 줄로 줄인다.
-    return lineHtml(b, lines[0]) +
-      `<li class="irr-more"><button type="button" class="irr-more-btn" data-act="fold">그 외 ${esc(UI.num(lines.length - 1))}종</button></li>`;
+    // 접힌 묶음: 첫 로케이션과 나머지 종 수만 한 줄로 보여 준다(단품 묶음처럼 보이지 않게). 누르면 펼쳐진다.
+    return `<li class="irr-more"><button type="button" class="irr-more-btn" data-act="fold" title="펼치기">
+        <span class="irr-more-loc">${esc(locText(lines[0].location_code))}</span>
+        <span class="irr-more-rest">그 외 ${esc(UI.num(lines.length - 1))}종</span>
+      </button></li>`;
   }
 
   function rowHtml(b) {
