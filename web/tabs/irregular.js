@@ -28,7 +28,6 @@
     seq: 0,              // 늦게 도착한 응답 무시용
     note: null,          // 열려 있는 요청 메모칸 {id(묶음), line(상품 줄), kind, text}
     open: new Set(),     // 펼쳐 둔 합포장 묶음 id (합포장 2종 이상은 접힌 채로 시작한다)
-    numbers: new Map(),  // String(묶음 id) -> 박스에 적을 순번('01', '02' …)
     rendering: false,    // 목록을 통째로 다시 그리는 중(이때 생기는 focusout 무시)
   };
 
@@ -53,14 +52,15 @@
   function findBundle(id) { return state.bundles.find(b => String(b.id) === String(id)); }
   function linesOf(b) { return Array.isArray(b && b.items) ? b.items : []; }
   function findLine(b, lineId) { return linesOf(b).find(l => String(l.id) === String(lineId)); }
-  // 박스에 적을 번호. MOPS 묶음번호 대신 그날 묶음을 주문서·묶음번호 순으로 세운 순번(01, 02 …)을 쓴다.
-  // 상태나 필터와 무관하게 정해지므로 작업 중에 바뀌지 않는다.
-  function numberBundles() {
-    const sorted = state.bundles.slice().sort((a, b) => cmp(a.batch_key, b.batch_key) || cmp(a.bundle_no, b.bundle_no));
-    state.numbers = new Map(sorted.map((b, i) => [String(b.id), String(i + 1).padStart(2, '0')]));
+  // 박스에 적을 번호. 서버가 묶음마다 한 번 붙여 저장한 값(box_no)이라 이후 바뀌지 않는다.
+  // 하루 안에서 이어지고(오전·오후 수집분 누적), 첫 상품 로케이션의 숫자 순으로 붙는다.
+  function boxNo(b) {
+    const n = toInt(b && b.box_no);
+    return n !== null && n > 0 ? n : null;
   }
   function bundleLabel(b) {
-    return state.numbers.get(String(b.id)) || '-';
+    const n = boxNo(b);
+    return n === null ? '-' : String(n).padStart(2, '0');
   }
   // 합포장(상품 2종 이상) 묶음만 접을 수 있다. 접힌 묶음은 '첫 로케이션 + 그 외 N종' 한 줄로 줄인다.
   function canFold(b) { return linesOf(b).length > 1; }
@@ -92,18 +92,12 @@
   function cmp(a, b) {
     return String(a ?? '').localeCompare(String(b ?? ''), 'ko', { numeric: true });
   }
-  // 위치가 없는 묶음은 맨 뒤로 보낸다.
-  function firstLoc(b) {
-    const locs = linesOf(b).map(l => String(l.location_code ?? '').trim()).filter(v => v && v !== '00').sort(cmp);
-    return locs.length ? locs[0] : null;
-  }
+  // 박스 번호 순. 포장완료도 제자리에 둔다(박스에 적힌 번호로 찾을 수 있게). 번호가 아직 없으면 맨 뒤.
   function sortBundles(list) {
     return list.slice().sort((a, b) => {
-      const da = a.status === '포장완료' ? 1 : 0;
-      const db = b.status === '포장완료' ? 1 : 0;
-      const la = firstLoc(a);
-      const lb = firstLoc(b);
-      return da - db || (la === null) - (lb === null) || cmp(la, lb) || cmp(a.bundle_no, b.bundle_no);
+      const na = boxNo(a);
+      const nb = boxNo(b);
+      return (na === null) - (nb === null) || (na ?? 0) - (nb ?? 0) || cmp(a.batch_key, b.batch_key) || cmp(a.bundle_no, b.bundle_no);
     });
   }
 
@@ -302,7 +296,8 @@
     const shown = state.filter === 'all' ? state.bundles : state.bundles.filter(b => b.status === state.filter);
     if (!shown.length) return `<p class="empty">'${esc(state.filter)}' 상태인 묶음이 없습니다.</p>`;
 
-    const batches = Array.from(new Set(state.bundles.map(b => String(b.batch_key ?? '')))).sort(cmp);
+    // 주문서가 여러 개면 번호가 앞선 주문서부터 보여 준다.
+    const batches = Array.from(new Set(sortBundles(state.bundles).map(b => String(b.batch_key ?? ''))));
     if (batches.length <= 1) {
       return `<ul class="wl-list">${sortBundles(shown).map(rowHtml).join('')}</ul>`;
     }
@@ -393,7 +388,6 @@
       const res = await UI.api.get('/irregular_items', { date });
       if (seq !== state.seq) return;
       state.bundles = Array.isArray(res && res.bundles) ? res.bundles : [];
-      numberBundles();
       state.loaded = true;
       state.error = '';
     } catch (err) {
