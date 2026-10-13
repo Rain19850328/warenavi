@@ -32,6 +32,7 @@
     seq: 0,              // 늦게 도착한 응답 무시용
     note: null,          // 열려 있는 요청 메모칸 {id(묶음), line(상품 줄), kind, text}
     open: new Set(),     // 펼쳐 둔 합포장 묶음 id (합포장 2종 이상은 접힌 채로 시작한다)
+    numbers: new Map(),  // String(묶음 id) -> 박스에 적을 순번('01', '02' …)
     rendering: false,    // 목록을 통째로 다시 그리는 중(이때 생기는 focusout 무시)
   };
 
@@ -56,8 +57,14 @@
   function findBundle(id) { return state.bundles.find(b => String(b.id) === String(id)); }
   function linesOf(b) { return Array.isArray(b && b.items) ? b.items : []; }
   function findLine(b, lineId) { return linesOf(b).find(l => String(l.id) === String(lineId)); }
+  // 박스에 적을 번호. MOPS 묶음번호 대신 그날 묶음을 주문서·묶음번호 순으로 세운 순번(01, 02 …)을 쓴다.
+  // 상태나 필터와 무관하게 정해지므로 작업 중에 바뀌지 않는다.
+  function numberBundles() {
+    const sorted = state.bundles.slice().sort((a, b) => cmp(a.batch_key, b.batch_key) || cmp(a.bundle_no, b.bundle_no));
+    state.numbers = new Map(sorted.map((b, i) => [String(b.id), String(i + 1).padStart(2, '0')]));
+  }
   function bundleLabel(b) {
-    return `묶음 ${String(b.bundle_no ?? '').trim() || '-'}`;
+    return state.numbers.get(String(b.id)) || '-';
   }
   // 합포장(상품 2종 이상) 묶음만 접을 수 있다. 요청 메모를 적는 중인 묶음은 펼쳐 둔다.
   function canFold(b) { return linesOf(b).length > 1; }
@@ -116,19 +123,21 @@
 .tab-irregular .irr-summary b{ color:#0f172a; }
 .tab-irregular .irr-batch{ margin:14px 0 6px; font-size:13px; font-weight:700; color:#475569; word-break:break-all; }
 .tab-irregular .irr-batch:first-child{ margin-top:0; }
-.tab-irregular .irr-head{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; }
-.tab-irregular .irr-title{ font-size:16px; font-weight:800; color:#0f172a; word-break:break-all; }
+.tab-irregular .irr-head{ display:flex; flex-wrap:nowrap; align-items:center; gap:6px; }
+.tab-irregular .irr-head > *{ flex:0 0 auto; white-space:nowrap; }
+.tab-irregular .irr-title{ min-width:34px; font-size:24px; font-weight:800; line-height:1.1; color:#0f172a; }
 .tab-irregular .irr-lines{ margin:8px 0 0; padding:0; list-style:none; }
 .tab-irregular .irr-line{ padding:10px 0; border-top:1px solid #e2e8f0; }
 .tab-irregular .irr-line-body{ display:flex; align-items:flex-start; gap:10px; }
 .tab-irregular .irr-info{ flex:1 1 auto; min-width:0; }
-.tab-irregular .irr-side{ flex:0 0 auto; display:flex; flex-direction:column; align-items:stretch; gap:6px; width:104px; }
+.tab-irregular .irr-side{ flex:0 0 auto; display:flex; flex-direction:column; align-items:stretch; gap:6px; width:116px; }
 .tab-irregular .irr-side .irr-qty{ text-align:right; }
-.tab-irregular .irr-side .irr-req{ display:flex; align-items:center; justify-content:center; gap:4px; width:100%; min-height:40px; padding:0 6px; font-size:13px; white-space:nowrap; }
+.tab-irregular .irr-reqs{ display:flex; gap:4px; }
+.tab-irregular .irr-side .irr-req{ flex:1 1 0; min-width:0; min-height:32px; padding:0 2px; font-size:12px; white-space:nowrap; }
 .tab-irregular .irr-bundle-actions{ padding-top:10px; border-top:1px solid #e2e8f0; }
 .tab-irregular .irr-loc{ font-size:20px; font-weight:800; line-height:1.25; color:#0f172a; word-break:break-all; }
 .tab-irregular .irr-name{ appearance:none; display:block; width:100%; min-height:32px; padding:4px 0; border:0; background:none; font-family:inherit; text-align:left; cursor:pointer; }
-.tab-irregular .irr-fold{ margin-left:auto; min-height:32px; padding:0 10px; font-size:13px; white-space:nowrap; }
+.tab-irregular .irr-head .irr-fold{ min-height:30px; padding:0 8px; font-size:13px; }
 .tab-irregular .wl-row.is-folded .irr-lines{ display:none; }
 .tab-irregular .irr-fold-summary{ display:flex; align-items:baseline; gap:10px; margin-top:6px; }
 .tab-irregular .irr-fold-locs{ flex:1 1 auto; min-width:0; font-size:16px; font-weight:700; color:#0f172a; word-break:break-all; }
@@ -173,14 +182,15 @@
     const fold = canFold(b)
       ? `<button type="button" class="btn-sm irr-fold" data-act="fold" aria-expanded="${folded ? 'false' : 'true'}">${folded ? '펼치기 ▾' : '접기 ▴'}</button>`
       : '';
+    // 번호 · 합포장 · 상태 · 접기 버튼은 항상 한 줄에 둔다. 길어질 수 있는 '제외됨' 표시는 아랫줄로 내린다.
     return `
       <div class="irr-head">
-        <span class="irr-title">${esc(bundleLabel(b))}</span>
+        <span class="irr-title" title="묶음 ${esc(String(b.bundle_no ?? '').trim() || '-')}">${esc(bundleLabel(b))}</span>
         ${n > 1 ? UI.chip(`합포장 ${n}종`, 'info') : ''}
         ${UI.chip(status, STATUS_TONE[status])}
-        ${b.stale ? UI.chip('주문서에서 제외됨', 'danger') : ''}
         ${fold}
       </div>
+      ${b.stale ? `<div class="wl-meta">${UI.chip('주문서에서 제외됨', 'danger')}</div>` : ''}
       ${folded ? foldSummaryHtml(b) : ''}
       ${changed}`;
   }
@@ -205,7 +215,8 @@
       const r = REQUESTS[kind];
       const on = !!open[r.key];
       const title = on ? `${r.label}됨` : r.label;
-      return `<button type="button" class="btn-sm irr-req${on ? ' is-requested' : ''}" data-act="req" data-kind="${kind}" title="${title}" aria-label="${title}"><span aria-hidden="true">${on ? '✓' : r.icon}</span>${r.short}</button>`;
+      // 좁은 버튼이라 아이콘은 빼고, 요청된 상태는 색으로 구분한다.
+      return `<button type="button" class="btn-sm irr-req${on ? ' is-requested' : ''}" data-act="req" data-kind="${kind}" title="${title}" aria-label="${title}">${r.short}</button>`;
     }).join('');
   }
 
@@ -230,7 +241,7 @@
           </div>
           <div class="irr-side">
             <div class="irr-qty">${esc(UI.num(line.qty))}개</div>
-            ${reqHtml(line)}
+            <div class="irr-reqs">${reqHtml(line)}</div>
           </div>
         </div>
         <div class="irr-note"${note ? '' : ' hidden'}>${note ? noteHtml(note) : ''}</div>
@@ -392,6 +403,7 @@
       const res = await UI.api.get('/irregular_items', { date });
       if (seq !== state.seq) return;
       state.bundles = Array.isArray(res && res.bundles) ? res.bundles : [];
+      numberBundles();
       state.loaded = true;
       state.error = '';
     } catch (err) {
