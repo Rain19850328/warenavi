@@ -115,16 +115,23 @@
 .tab-irregular .irr-summary b{ color:#0f172a; }
 .tab-irregular .irr-batch{ display:flex; align-items:center; gap:6px; margin:14px 0 6px; font-size:13px; font-weight:700; color:#475569; word-break:break-all; }
 .tab-irregular .irr-batch:first-child{ margin-top:0; }
-.tab-irregular .irr-batch-dot{ flex:0 0 auto; width:12px; height:12px; border-radius:50%; border:1px solid; }
-.tab-irregular .irr-tone-0{ background:#bfdbfe; border-color:#60a5fa; color:#1e3a8a; }
-.tab-irregular .irr-tone-1{ background:#fecaca; border-color:#f87171; color:#7f1d1d; }
-.tab-irregular .irr-tone-2{ background:#fde68a; border-color:#fbbf24; color:#713f12; }
-.tab-irregular .irr-tone-3{ background:#bbf7d0; border-color:#4ade80; color:#14532d; }
-.tab-irregular .irr-tone-4{ background:#ddd6fe; border-color:#a78bfa; color:#4c1d95; }
+.tab-irregular .irr-batch-dot{ flex:0 0 auto; width:12px; height:12px; border-radius:50%; background:linear-gradient(135deg, var(--tone-a), var(--tone-b)); }
+/* 수집 회차별 색: 파랑 → 빨강(코랄) → 노랑(앰버) → 초록 → 보라 */
+.tab-irregular .irr-tone-0{ --tone-a:#38bdf8; --tone-b:#3b82f6; --tone-glow:rgba(59,130,246,.35); }
+.tab-irregular .irr-tone-1{ --tone-a:#fb7185; --tone-b:#f43f5e; --tone-glow:rgba(244,63,94,.35); }
+.tab-irregular .irr-tone-2{ --tone-a:#fbbf24; --tone-b:#f59e0b; --tone-glow:rgba(245,158,11,.4); }
+.tab-irregular .irr-tone-3{ --tone-a:#34d399; --tone-b:#10b981; --tone-glow:rgba(16,185,129,.35); }
+.tab-irregular .irr-tone-4{ --tone-a:#a78bfa; --tone-b:#8b5cf6; --tone-glow:rgba(139,92,246,.35); }
 .tab-irregular .irr-head{ display:flex; flex-wrap:nowrap; align-items:center; gap:6px; }
 .tab-irregular .irr-head > *{ flex:0 0 auto; white-space:nowrap; }
-.tab-irregular .irr-title{ display:inline-flex; align-items:baseline; gap:4px; padding:4px 10px; border-width:1px; border-style:solid; border-radius:8px; font-size:24px; font-weight:800; line-height:1.1; letter-spacing:.5px; }
-.tab-irregular .irr-title small{ font-size:12px; font-weight:700; letter-spacing:0; opacity:.75; }
+.tab-irregular .irr-title{
+  display:inline-flex; align-items:baseline; gap:5px; padding:5px 14px 5px 12px; border-radius:999px;
+  background:linear-gradient(135deg, var(--tone-a, #38bdf8), var(--tone-b, #3b82f6)); color:#fff;
+  box-shadow:0 2px 6px var(--tone-glow, rgba(59,130,246,.35));
+  font-size:22px; font-weight:800; line-height:1.1; letter-spacing:.5px; font-variant-numeric:tabular-nums;
+  text-shadow:0 1px 1px rgba(15,23,42,.18);
+}
+.tab-irregular .irr-title small{ font-size:11px; font-weight:700; letter-spacing:1px; opacity:.9; }
 .tab-irregular .irr-lines{ margin:8px 0 0; padding:0; list-style:none; }
 .tab-irregular .irr-line{ padding:10px 0; border-top:1px solid #e2e8f0; }
 .tab-irregular .irr-line-body{ display:flex; align-items:flex-start; gap:10px; }
@@ -136,7 +143,7 @@
 .tab-irregular .irr-bundle-actions{ padding-top:10px; border-top:1px solid #e2e8f0; }
 .tab-irregular .irr-loc{ font-size:20px; font-weight:800; line-height:1.25; color:#0f172a; word-break:break-all; }
 .tab-irregular .irr-name{ appearance:none; display:block; width:100%; min-height:32px; padding:4px 0; border:0; background:none; font-family:inherit; text-align:left; cursor:pointer; }
-.tab-irregular .irr-head .irr-fold{ margin-left:auto; min-width:40px; min-height:34px; padding:0; font-size:16px; }
+.tab-irregular .irr-head .irr-fold{ margin-left:auto; min-height:34px; padding:0 10px; font-size:13px; }
 .tab-irregular .irr-more{ padding:10px 0; border-top:1px solid #e2e8f0; }
 .tab-irregular .irr-more-btn{ appearance:none; display:flex; align-items:baseline; gap:10px; width:100%; min-height:36px; padding:0; border:0; background:none; font-family:inherit; text-align:left; cursor:pointer; }
 .tab-irregular .irr-more-loc{ font-size:20px; font-weight:800; line-height:1.25; color:#0f172a; word-break:break-all; }
@@ -172,7 +179,7 @@
       : '';
     const folded = isFolded(b);
     const fold = canFold(b)
-      ? `<button type="button" class="btn-sm irr-fold" data-act="fold" aria-expanded="${folded ? 'false' : 'true'}" aria-label="${folded ? '펼치기' : '접기'}" title="${folded ? '펼치기' : '접기'}">${folded ? '▾' : '▴'}</button>`
+      ? `<button type="button" class="btn-sm irr-fold" data-act="fold" aria-expanded="${folded ? 'false' : 'true'}" aria-label="${folded ? '펼치기' : '접기'}" title="${folded ? '펼치기' : '접기'}">${folded ? '펼치기 ▾' : '접기 ▴'}</button>`
       : '';
     // 번호 · 상태 · 접기 버튼은 항상 한 줄에 둔다. 길어질 수 있는 '제외됨' 표시는 아랫줄로 내린다.
     return `
@@ -256,15 +263,13 @@
     const el = state.els.summary;
     if (!el) return;
     if (!state.loaded || !state.bundles.length) { el.hidden = true; el.innerHTML = ''; return; }
-    let qty = 0;
     const count = { '대기': 0, '작업중': 0, '포장완료': 0 };
     for (const b of state.bundles) {
-      for (const line of linesOf(b)) qty += Number(line.qty) || 0;
       if (count[b.status] !== undefined) count[b.status] += 1;
     }
     el.hidden = false;
     el.innerHTML =
-      `총 <b>${esc(UI.num(state.bundles.length))}</b>묶음 · 수량 합계 <b>${esc(UI.num(qty))}</b> · ` +
+      `총 <b>${esc(UI.num(state.bundles.length))}</b>묶음 · ` +
       `대기 <b>${count['대기']}</b> / 작업중 <b>${count['작업중']}</b> / 포장완료 <b>${count['포장완료']}</b>`;
   }
 
