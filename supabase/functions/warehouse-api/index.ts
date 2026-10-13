@@ -132,7 +132,7 @@ async function callRpc(name: string, args: Record<string, unknown> = {}) {
 
 // ---- 플레이오토: 확인요청에서 반영한 실재고를 SKU 재고로 보낸다 ----
 // 주소 · 본문 모양은 PageMaker(backend/agents/publisher/playauto.py)에서 실측으로 확인한 것과 같다.
-// 재고는 실재고(stock_cnt_real)만 바꾼다. 안전재고는 그대로 두되 실재고를 넘으면 실재고에 맞춘다(넘을 수 없는 규칙).
+// 재고는 실재고(stock_cnt_real)만 바꾼다. 안전재고는 그대로 두고, 그 값이 거절될 때만 실재고에 맞춘다.
 const PLAYAUTO_API = "https://openapi.playauto.io/api";
 type PlayautoResult = { status: "sent" | "failed" | "pending"; message: string };
 const playautoToken = { token: "", date: "" };   // 하루치 토큰을 재사용한다
@@ -190,6 +190,10 @@ async function playautoLookup(sku: string): Promise<Record<string, unknown> | nu
     search_key: "sku_cd",
     search_word: sku,
     search_type: "exact",
+    // 등록일 범위를 빼면 최근에 등록한 SKU만 나온다. MOPS처럼 전체 기간을 준다.
+    date_type: "wdate",
+    sdate: "2000-01-01",
+    edate: new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10),   // 한국 날짜
   });
   const rows = Array.isArray(data.results) ? data.results as Record<string, unknown>[] : [];
   return rows.find((row) => String(row?.sku_cd ?? "") === sku) ?? null;
@@ -211,13 +215,18 @@ async function sendStockToPlayauto(itemCode: unknown, countedQty: unknown): Prom
     if (!current) return { status: "failed", message: `플레이오토에 등록되지 않은 SKU입니다 (${sku})` };
     const depotNo = Number(current.depot_no) || Number(Deno.env.get("PLAYAUTO_DEPOT_NO"));
     if (!depotNo) return { status: "failed", message: "플레이오토 배송처 코드를 알 수 없습니다" };
-    const safe = Math.min(Math.max(0, Number(current.stock_cnt_safe) || 0), qty);
+    const safeNow = Math.max(0, Number(current.stock_cnt_safe) || 0);
+    const edit = async (safe: number) =>
+      await playautoCall("PUT", "/stock/edit/v1.2", {
+        sku_cd: sku,
+        depots: [{ depot_no: depotNo, real_stock: qty, safe_stock: safe }],
+      });
+    const failed = (r: Record<string, unknown>) => String(r.result ?? "") === "실패" || !!r.error_code;
 
-    const res = await playautoCall("PUT", "/stock/edit/v1.2", {
-      sku_cd: sku,
-      depots: [{ depot_no: depotNo, real_stock: qty, safe_stock: safe }],
-    });
-    if (String(res.result ?? "") === "실패" || res.error_code) {
+    // 안전재고는 그대로 보낸다. 실재고보다 커서 거절되면 그때만 실재고에 맞춰 다시 보낸다.
+    let res = await edit(safeNow);
+    if (failed(res) && safeNow > qty) res = await edit(qty);
+    if (failed(res)) {
       const messages = Array.isArray(res.messages) ? res.messages.filter(Boolean).join(" ") : "";
       return { status: "failed", message: (messages || JSON.stringify(res)).slice(0, 300) };
     }
