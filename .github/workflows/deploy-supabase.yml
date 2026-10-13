@@ -36,6 +36,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # latest 버전 조회가 GitHub API 호출 한도에 걸려 가끔 실패한다("rate limit exceeded"). 그때는 다시 실행하면 된다.
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
