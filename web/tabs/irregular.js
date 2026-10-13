@@ -66,12 +66,10 @@
   function bundleLabel(b) {
     return state.numbers.get(String(b.id)) || '-';
   }
-  // 합포장(상품 2종 이상) 묶음만 접을 수 있다. 요청 메모를 적는 중인 묶음은 펼쳐 둔다.
+  // 합포장(상품 2종 이상) 묶음만 접을 수 있다. 접힌 묶음은 첫 상품만 보이고 나머지는 '그 외 N종'으로 줄인다.
   function canFold(b) { return linesOf(b).length > 1; }
   function isFolded(b) {
-    if (!canFold(b)) return false;
-    if (state.note && String(state.note.id) === String(b.id)) return false;
-    return !state.open.has(String(b.id));
+    return canFold(b) && !state.open.has(String(b.id));
   }
   function rowEl(id) {
     if (!state.els.body) return null;
@@ -125,7 +123,8 @@
 .tab-irregular .irr-batch:first-child{ margin-top:0; }
 .tab-irregular .irr-head{ display:flex; flex-wrap:nowrap; align-items:center; gap:6px; }
 .tab-irregular .irr-head > *{ flex:0 0 auto; white-space:nowrap; }
-.tab-irregular .irr-title{ min-width:34px; font-size:24px; font-weight:800; line-height:1.1; color:#0f172a; }
+.tab-irregular .irr-title{ display:inline-flex; align-items:baseline; gap:4px; padding:4px 10px; border-radius:8px; background:#0f172a; color:#fff; font-size:24px; font-weight:800; line-height:1.1; letter-spacing:.5px; }
+.tab-irregular .irr-title small{ font-size:12px; font-weight:700; letter-spacing:0; color:#cbd5e1; }
 .tab-irregular .irr-lines{ margin:8px 0 0; padding:0; list-style:none; }
 .tab-irregular .irr-line{ padding:10px 0; border-top:1px solid #e2e8f0; }
 .tab-irregular .irr-line-body{ display:flex; align-items:flex-start; gap:10px; }
@@ -137,11 +136,9 @@
 .tab-irregular .irr-bundle-actions{ padding-top:10px; border-top:1px solid #e2e8f0; }
 .tab-irregular .irr-loc{ font-size:20px; font-weight:800; line-height:1.25; color:#0f172a; word-break:break-all; }
 .tab-irregular .irr-name{ appearance:none; display:block; width:100%; min-height:32px; padding:4px 0; border:0; background:none; font-family:inherit; text-align:left; cursor:pointer; }
-.tab-irregular .irr-head .irr-fold{ min-height:30px; padding:0 8px; font-size:13px; }
-.tab-irregular .wl-row.is-folded .irr-lines{ display:none; }
-.tab-irregular .irr-fold-summary{ display:flex; align-items:baseline; gap:10px; margin-top:6px; }
-.tab-irregular .irr-fold-locs{ flex:1 1 auto; min-width:0; font-size:16px; font-weight:700; color:#0f172a; word-break:break-all; }
-.tab-irregular .irr-fold-qty{ flex:0 0 auto; font-size:16px; font-weight:800; color:#0f172a; white-space:nowrap; }
+.tab-irregular .irr-head .irr-fold{ margin-left:auto; min-width:40px; min-height:34px; padding:0; font-size:16px; }
+.tab-irregular .irr-more{ padding:0 0 10px; }
+.tab-irregular .irr-more-btn{ appearance:none; display:block; width:100%; min-height:36px; padding:0 10px; border:1px dashed #cbd5e1; border-radius:8px; background:#f8fafc; color:#475569; font-family:inherit; font-size:14px; font-weight:700; text-align:center; cursor:pointer; }
 .tab-irregular .irr-qty{ font-size:20px; font-weight:800; color:#0f172a; white-space:nowrap; }
 .tab-irregular .wl-row.is-done{ opacity:1; }
 .tab-irregular .wl-row{ display:block; }
@@ -174,33 +171,22 @@
   /* ---------- html builders ---------- */
   function headHtml(b) {
     const status = STATUSES.includes(b.status) ? b.status : '대기';
-    const n = linesOf(b).length;
     const changed = b.status_changed_at || b.status_changed_by_name
       ? `<div class="wl-meta">상태 변경: ${esc(b.status_changed_by_name || '-')}${b.status_changed_at ? ' · ' + esc(UI.fmtDateTime(b.status_changed_at)) : ''}</div>`
       : '';
     const folded = isFolded(b);
     const fold = canFold(b)
-      ? `<button type="button" class="btn-sm irr-fold" data-act="fold" aria-expanded="${folded ? 'false' : 'true'}">${folded ? '펼치기 ▾' : '접기 ▴'}</button>`
+      ? `<button type="button" class="btn-sm irr-fold" data-act="fold" aria-expanded="${folded ? 'false' : 'true'}" aria-label="${folded ? '펼치기' : '접기'}" title="${folded ? '펼치기' : '접기'}">${folded ? '▾' : '▴'}</button>`
       : '';
-    // 번호 · 합포장 · 상태 · 접기 버튼은 항상 한 줄에 둔다. 길어질 수 있는 '제외됨' 표시는 아랫줄로 내린다.
+    // 번호 · 상태 · 접기 버튼은 항상 한 줄에 둔다. 길어질 수 있는 '제외됨' 표시는 아랫줄로 내린다.
     return `
       <div class="irr-head">
-        <span class="irr-title" title="묶음 ${esc(String(b.bundle_no ?? '').trim() || '-')}">${esc(bundleLabel(b))}</span>
-        ${n > 1 ? UI.chip(`합포장 ${n}종`, 'info') : ''}
+        <span class="irr-title" title="묶음 ${esc(String(b.bundle_no ?? '').trim() || '-')}"><small>NO.</small>${esc(bundleLabel(b))}</span>
         ${UI.chip(status, STATUS_TONE[status])}
         ${fold}
       </div>
       ${b.stale ? `<div class="wl-meta">${UI.chip('주문서에서 제외됨', 'danger')}</div>` : ''}
-      ${folded ? foldSummaryHtml(b) : ''}
       ${changed}`;
-  }
-
-  // 접힌 묶음에 보여 줄 한 줄 요약: 위치들과 수량 합계.
-  function foldSummaryHtml(b) {
-    const lines = linesOf(b);
-    const locs = Array.from(new Set(lines.map(l => locText(l.location_code)))).sort(cmp);
-    const qty = lines.reduce((sum, l) => sum + (Number(l.qty) || 0), 0);
-    return `<div class="irr-fold-summary"><span class="irr-fold-locs">${esc(locs.join(' · '))}</span><span class="irr-fold-qty">총 ${esc(UI.num(qty))}개</span></div>`;
   }
 
   function statusHtml(b) {
@@ -249,7 +235,11 @@
   }
 
   function linesHtml(b) {
-    return linesOf(b).map(line => lineHtml(b, line)).join('');
+    const lines = linesOf(b);
+    if (!isFolded(b)) return lines.map(line => lineHtml(b, line)).join('');
+    // 접힌 묶음: 첫 상품만 보여 주고, 나머지는 누르면 펼쳐지는 한 줄로 줄인다.
+    return lineHtml(b, lines[0]) +
+      `<li class="irr-more"><button type="button" class="irr-more-btn" data-act="fold">그 외 ${esc(UI.num(lines.length - 1))}종</button></li>`;
   }
 
   function rowHtml(b) {
