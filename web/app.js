@@ -762,6 +762,12 @@ async function getRequestHeaders(extra = {}) {
 
 /* ---------- utils ---------- */
 function occupancyRate(used, cap) { return cap <= 0 ? 0 : (used / cap) * 100.0; }
+// SR2는 수량을 세지 않는 렉이다(있음/없음만 본다). 판정은 ui.js와 같은 규칙을 쓴다.
+function isPresenceRack(code) { return window.UI.isPresenceRack(code); }
+const PRESENCE_COLORS = {
+  empty: {fill:'#ffffff', border:'#cbd5e1'},
+  filled: {fill:'#dcfce7', border:'#50A468'},
+};
 function colorByRate(total, cap) {
   const rate = cap <= 0 ? 0 : (total / cap) * 100;
   const low = CONFIG.rate_low_max ?? 30;
@@ -776,7 +782,10 @@ function buildLegend() {
   const normal = CONFIG.rate_normal_max ?? 70;
   const legend = document.createElement('div');
   legend.className = 'legend';
-  const entries = [
+  const entries = isPresenceRack(`${CURRENT_ROW}-`) ? [
+    {label:'없음', style:{background:PRESENCE_COLORS.empty.fill, border:PRESENCE_COLORS.empty.border}},
+    {label:'있음', style:{background:PRESENCE_COLORS.filled.fill, border:PRESENCE_COLORS.filled.border}},
+  ] : [
     {label:'0%', style:{background:'#ffffff', border:'#cbd5e1'}},
     {label:`0~${low}%`, style:{background:'#e0f2fe', border:'#3C8CC8'}},
     {label:`${low}~${normal}%`, style:{background:'#dcfce7', border:'#50A468'}},
@@ -941,13 +950,17 @@ function renderRack() {
         if (queryUpper && isMatch) cell.classList.add('match');
         if (queryUpper && !isMatch) cell.style.opacity = 0.14;
 
-        const {fill, border} = colorByRate(ci.total_cm3, ci.capacity_cm3);
+        const presence = isPresenceRack(ci.code);
+        const filled = (ci.items||[]).some(it => Number(it.qty) > 0);
+        const {fill, border} = presence
+          ? PRESENCE_COLORS[filled ? 'filled' : 'empty']
+          : colorByRate(ci.total_cm3, ci.capacity_cm3);
         cell.style.background = fill; cell.style.borderColor = border;
 
         const rate = Math.floor(occupancyRate(ci.total_cm3, ci.capacity_cm3));
         const mid = document.createElement('div');
         mid.className = 'rate';
-        mid.textContent = `${rate}%`;
+        mid.textContent = presence ? (filled ? '있음' : '') : `${rate}%`;
         cell.append(mid);
 
         const newInboundTargetVisible =
@@ -1020,8 +1033,11 @@ function showDetail(ci) {
   document.querySelector('#selTitle').textContent = `선택된 위치: ${ci.code}`;
   const rate = Math.floor(occupancyRate(ci.total_cm3, ci.capacity_cm3));
   const remain = Math.max(0, ci.capacity_cm3 - ci.total_cm3);
-  document.querySelector('#selStats').textContent = `적재율: ${rate}% · 용량: ${fmtM3(ci.capacity_cm3)} · 사용: ${fmtM3(ci.total_cm3)} · 남은공간: ${fmtM3(remain)}`;
-  document.querySelector('#barFill').style.width = Math.min(100, rate) + '%';
+  const presence = isPresenceRack(ci.code);
+  document.querySelector('#selStats').textContent = presence
+    ? `수량을 세지 않는 위치 · 상품 ${(ci.items||[]).length}종`
+    : `적재율: ${rate}% · 용량: ${fmtM3(ci.capacity_cm3)} · 사용: ${fmtM3(ci.total_cm3)} · 남은공간: ${fmtM3(remain)}`;
+  document.querySelector('#barFill').style.width = (presence ? 0 : Math.min(100, rate)) + '%';
 
   const tb = document.querySelector('#tblItems tbody');
   tb.innerHTML = '';
@@ -1029,7 +1045,7 @@ function showDetail(ci) {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td><div>${it.sku}</div><div class="muted">${it.location||''}</div></td>
                     <td>${it.name||''}</td>
-                    <td style="text-align:center">${(it.qty??0).toLocaleString('ko-KR')}</td>`;
+                    <td style="text-align:center">${presence ? '있음' : (it.qty??0).toLocaleString('ko-KR')}</td>`;
     tr.addEventListener('click', ()=> {
       tb.querySelectorAll('tr.sel').forEach(x=>x.classList.remove('sel'));
       tr.classList.add('sel');
@@ -1062,6 +1078,10 @@ async function openInbound() {
   if (!titleEl || !list || !qbox || !qtyEl) { alert('입고창 구성요소 오류'); return; }
   titleEl.textContent = `입고(${CURRENT_CELL.code})`;
   list.innerHTML = '';
+  // SR2는 수량을 받지 않는다. '있음'으로만 남도록 1을 넣는다.
+  const presence = isPresenceRack(CURRENT_CELL.code);
+  const qtyLabel = qtyEl.closest('label');
+  if (qtyLabel) qtyLabel.style.display = presence ? 'none' : '';
 
   async function search() {
     const q = (qbox.value || '').trim();
@@ -1110,7 +1130,7 @@ async function openInbound() {
     const selRow = list.querySelector('.item.sel');
     if (!selRow) { alert('아이템을 선택하세요.'); return; }
     const code = selRow.querySelector('strong').textContent.trim();
-    const qty = Math.max(1, parseInt(qtyEl.value||'1',10));
+    const qty = presence ? 1 : Math.max(1, parseInt(qtyEl.value||'1',10));
     try {
       setDialogPending(dlg, true, '#dlgOk');
       await postJSON(`${API_BASE}/inbound`, { rack_code: CURRENT_CELL.code, item_code: code, qty });
@@ -1118,7 +1138,9 @@ async function openInbound() {
       await loadCells();
       const found = CELLS.find(c=>c.code===CURRENT_CELL.code);
       if (found) showDetail(found);
-      alert(`[${CURRENT_CELL.code}] 위치로 ${code} ${qty}개 입고 완료`);
+      alert(presence
+        ? `[${CURRENT_CELL.code}] 위치로 ${code} 입고 완료`
+        : `[${CURRENT_CELL.code}] 위치로 ${code} ${qty}개 입고 완료`);
       closeDialog(dlg);
       setDialogPending(dlg, false, '#dlgOk');
     } catch (err) {
@@ -1163,14 +1185,22 @@ async function openOutbound(){
   const meta  = dlg.querySelector('#outMeta');
   const qtyEl = dlg.querySelector('#outQty');
   if(title) title.textContent = `출고(${CURRENT_CELL.code})`;
-  if(meta)  meta.textContent  = `위치: ${CURRENT_CELL.code} · SKU: ${item.sku} · 보유: ${item.qty}개`;
-  if(qtyEl){ qtyEl.min = 1; qtyEl.max = Math.max(1, item.qty); qtyEl.value = 1; }
+  // SR2는 수량을 받지 않는다. 출고하면 이 위치에서 상품을 통째로 뺀다.
+  const presence = isPresenceRack(CURRENT_CELL.code);
+  if(meta)  meta.textContent  = presence
+    ? `위치: ${CURRENT_CELL.code} · SKU: ${item.sku} · 이 위치에서 상품을 뺍니다`
+    : `위치: ${CURRENT_CELL.code} · SKU: ${item.sku} · 보유: ${item.qty}개`;
+  if(qtyEl){
+    qtyEl.min = 1; qtyEl.max = Math.max(1, item.qty); qtyEl.value = 1;
+    const qtyLabel = qtyEl.closest('label');
+    if (qtyLabel) qtyLabel.style.display = presence ? 'none' : '';
+  }
 
   dlg.querySelector('#outCancel').onclick = (e)=>{ e.preventDefault(); closeDialog(dlg); };
   dlg.querySelector('#outOk').onclick = async (e)=>{
     e.preventDefault();
     if (isDialogPending(dlg)) return;
-    const qty = Math.max(1, Math.min(item.qty, parseInt((qtyEl?.value)||'1',10)));
+    const qty = presence ? item.qty : Math.max(1, Math.min(item.qty, parseInt((qtyEl?.value)||'1',10)));
     try{
       setDialogPending(dlg, true, '#outOk');
       try {
@@ -1187,7 +1217,7 @@ async function openOutbound(){
   };
 
   openDialog(dlg);
-  qtyEl?.focus();
+  if (!presence) qtyEl?.focus();
 }
 
 /* === 이동 다이얼로그 === */
@@ -1258,13 +1288,19 @@ async function openMove(preserve=false){
   const pickBtn = dlg.querySelector('#movePick');
 
   if(title)  title.textContent = `이동(${MOVE.sourceCode})`;
-  if(meta)   meta.textContent  = `FROM ${MOVE.sourceCode} · SKU: ${MOVE.sku} · 보유: ${MOVE.maxQty}개`;
+  // SR2에서 나가는 이동은 수량을 받지 않고 통째로 옮긴다.
+  const presence = isPresenceRack(MOVE.sourceCode);
+  if(meta)   meta.textContent  = presence
+    ? `FROM ${MOVE.sourceCode} · SKU: ${MOVE.sku} · 통째로 옮깁니다`
+    : `FROM ${MOVE.sourceCode} · SKU: ${MOVE.sku} · 보유: ${MOVE.maxQty}개`;
   if(codeEl) codeEl.textContent = MOVE.targetCode || '-';
 
   if(qtyEl){
     qtyEl.min = 1;
     qtyEl.max = Math.max(1, MOVE.maxQty);
-    if(!preserve || !qtyEl.value) qtyEl.value = MOVE.maxQty;
+    if(presence || !preserve || !qtyEl.value) qtyEl.value = MOVE.maxQty;
+    const qtyLabel = qtyEl.closest('label');
+    if (qtyLabel) qtyLabel.style.display = presence ? 'none' : '';
   }
 
   dlg.querySelector('#moveCancel').onclick = (e)=>{ e.preventDefault(); resetMoveState(); closeDialog(dlg); };
@@ -1273,6 +1309,10 @@ async function openMove(preserve=false){
     if (isDialogPending(dlg)) return;
     if(!MOVE.targetCode) return alert('대상 위치를 선택하세요.');
     if(MOVE.targetCode === MOVE.sourceCode) return alert('같은 위치로는 이동할 수 없습니다.');
+    // SR2의 숫자는 실제 수량이 아니라서, 수량을 세는 위치로 그대로 옮기면 틀린 수량이 들어간다.
+    if(presence && !isPresenceRack(MOVE.targetCode)) {
+      return alert('SR2는 수량을 세지 않아 SR1·SR3로 바로 이동할 수 없습니다.\nSR2에서 출고한 뒤, 옮길 위치에 수량을 넣어 입고해 주세요.');
+    }
     let qty = parseInt((qtyEl?.value)||'1',10);
     if(!Number.isFinite(qty) || qty <= 0) qty = 1;
     if(qty > MOVE.maxQty) qty = MOVE.maxQty;
@@ -1644,7 +1684,7 @@ async function openNewInboundDialog(){
   const dateInput = dlg.querySelector('#newInboundDate');
   const targetDate = NEW_INBOUND.date || todayYmd();
   if (dateInput) dateInput.value = targetDate;
-  // 다른 화면(창고맵에서 위치를 고른 뒤 등)에서 불렸으면 신규입고 탭으로 돌아간다. 탭이 열리면서 다시 호출된다.
+  // 다른 화면(창고네비에서 위치를 고른 뒤 등)에서 불렸으면 신규입고 탭으로 돌아간다. 탭이 열리면서 다시 호출된다.
   if (window.Shell && window.Shell.current() !== 'newinbound') {
     window.Shell.show('newinbound');
     return;
@@ -1760,7 +1800,7 @@ async function openNewInboundProcessDialog(mode, preserveDraft=false){
       NEW_INBOUND.picking = true;
       NEW_INBOUND.reopenAfterPick = true;
       closeDialog(dlg);
-      // 렉 칸을 고르려면 창고맵이 보여야 한다. 칸을 누르면 이 창이 다시 열린다.
+      // 렉 칸을 고르려면 창고네비이 보여야 한다. 칸을 누르면 이 창이 다시 열린다.
       if (window.Shell) window.Shell.show('map');
     };
   }
@@ -1861,7 +1901,7 @@ async function renderSearchResults(query){
     tr.innerHTML = `<td>${r.rack_code}</td>
                     <td><div>${r.sku}</div><div class="muted">${r.location||''}</div></td>
                     <td>${r.name||''}</td>
-                    <td class="r">${(r.qty||0).toLocaleString('ko-KR')}</td>`;
+                    <td class="r">${isPresenceRack(r.rack_code) ? '있음' : (r.qty||0).toLocaleString('ko-KR')}</td>`;
     tr.addEventListener('click', async ()=>{
       try{
         const rowLabel = r.row || r.rack_code.split('-')[0];

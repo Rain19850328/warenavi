@@ -133,10 +133,15 @@
     return `<span class="chip chip--${kind}">${esc(text)}</span>`;
   }
 
+  // SR2는 수량을 세지 않는 렉이다. 숫자는 의미가 없고 '있음/없음'만 본다.
+  function isPresenceRack(rackCode) {
+    return /^SR2-/i.test(String(rackCode || '').trim());
+  }
+
   function rackChips(racks) {
     const list = Array.isArray(racks) ? racks.filter(r => r && r.rack_code) : [];
     if (!list.length) return chip('스토리지렉 재고 없음', 'muted');
-    return `<span class="rack-chips">${list.map(r => chip(`${r.rack_code} · ${num(r.qty)}`, 'info')).join('')}</span>`;
+    return `<span class="rack-chips">${list.map(r => chip(`${r.rack_code} · ${isPresenceRack(r.rack_code) ? '있음' : num(r.qty)}`, 'info')).join('')}</span>`;
   }
 
   /* ---------- date bar ---------- */
@@ -271,6 +276,7 @@
     toast,
     confirm: confirmDialog,
     chip,
+    isPresenceRack,
     rackChips,
     dateBar,
     busy,

@@ -1,6 +1,6 @@
 /* =======================================================
    ui.css — 탭 화면 공용 스타일 (탭바 / 리스트 카드 / 칩 / 버튼 / 폼 / 토스트)
-   기존 창고맵 화면(style.css) 요소는 건드리지 않는다.
+   기존 창고네비 화면(style.css) 요소는 건드리지 않는다.
    ======================================================= */
 
 /* ---------- Views ---------- */
@@ -108,7 +108,7 @@ dialog :not(.suggest) > .empty{
   appearance: none;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: 40px; height: auto; padding: 0 14px;
-  /* 창고맵의 .toolbar button / .detail-actions button 과 같은 서식 */
+  /* 창고네비의 .toolbar button / .detail-actions button 과 같은 서식 */
   border: 1px solid #e2e8f0; border-radius: 10px;
   background: #f8fafc; color: #0f172a;
   box-shadow: 0 1px 1px rgba(0,0,0,.06);

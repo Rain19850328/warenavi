@@ -31,6 +31,7 @@ const ROUTE_MIN_ROLE: Record<string, Role> = {
   "POST /new_inbound_list/process": "admin",
   "POST /stock_status": "admin",
   "POST /soldout_items/remove": "admin",
+  "GET /action_logs": "manager",
   "GET /users": "admin",
   "POST /users/role": "admin",
 };
@@ -317,7 +318,7 @@ function isRackCodeText(text: string) {
 
 async function matchScanCode(text: string): Promise<ScanCandidate | null> {
   if (isRackCodeText(text)) {
-    // 랙 코드는 형식이 맞으면 후보로 인정한다(빈 랙도 창고맵에서 찾을 수 있어야 한다).
+    // 랙 코드는 형식이 맞으면 후보로 인정한다(빈 랙도 창고네비에서 찾을 수 있어야 한다).
     const data = await callRpc("warehouse_search_racks", { p_q: text, p_limit: 5 });
     const rows = Array.isArray(data?.results) ? data.results : [];
     return {

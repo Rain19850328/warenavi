@@ -36,11 +36,13 @@
   flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   font-size: 13px; font-weight: 600; color: #334155;
 }
-.tab-display .dp-take input{
+.tab-display .dp-take label{ display: inline-flex; align-items: center; gap: 8px; min-height: 40px; }
+.tab-display .dp-take input[type="checkbox"]{ width: 20px; height: 20px; }
+.tab-display .dp-take input[type="text"]{
   width: 84px; height: 40px; padding: 0 8px; border: 1px solid #cbd5e1; border-radius: 10px;
   background: #fff; color: #0f172a; font: inherit; font-size: 16px; text-align: right;
 }
-.tab-display .dp-take input:focus{ outline: none; border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56,189,248,.25); }
+.tab-display .dp-take input[type="text"]:focus{ outline: none; border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56,189,248,.25); }
 .tab-display .dp-take .btn-sm{ min-height: 40px; }
 .tab-display .dp-hint{ flex: 1 0 100%; font-size: 12px; font-weight: 500; color: #64748b; }
 .tab-display .dp-taken{
@@ -186,9 +188,14 @@
     } else {
       const buttons = rackList(r).map(x => {
         const on = !!pick && String(pick.rack) === String(x.rack_code);
-        return `<button type="button" class="dp-rack${on ? ' is-active' : ''}" data-act="pick-rack" data-rack="${esc(x.rack_code)}" aria-pressed="${on ? 'true' : 'false'}">${esc(x.rack_code)}<b>${esc(UI.num(x.qty))}개</b></button>`;
+        return `<button type="button" class="dp-rack${on ? ' is-active' : ''}" data-act="pick-rack" data-rack="${esc(x.rack_code)}" aria-pressed="${on ? 'true' : 'false'}">${esc(x.rack_code)}<b>${UI.isPresenceRack(x.rack_code) ? '있음' : `${esc(UI.num(x.qty))}개`}</b></button>`;
       }).join('');
-      const take = pick
+      // SR2는 수량을 세지 않는다. 가져올 수량 대신 '칸이 비었는지'만 받는다.
+      const take = pick && UI.isPresenceRack(pick.rack)
+        ? `<div class="dp-take">
+             <label><input type="checkbox" data-role="take-empty"${pick.empty ? ' checked' : ''} /> 다 가져와서 이 칸이 비었음</label>
+           </div>`
+        : pick
         ? `<div class="dp-take">
              <label for="dpQty-${esc(id)}">가져올 수량</label>
              <input type="text" id="dpQty-${esc(id)}" data-role="take-qty" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" value="${esc(pick.qty)}" />
@@ -200,7 +207,7 @@
     }
     const takenQty = numOrNull(r.taken_qty);
     const taken = done && r.taken_rack_code && takenQty
-      ? `<div class="dp-taken">가져온 곳 ${esc(r.taken_rack_code)} · ${esc(UI.num(takenQty))}개 차감</div>`
+      ? `<div class="dp-taken">가져온 곳 ${esc(r.taken_rack_code)} · ${UI.isPresenceRack(r.taken_rack_code) ? '칸 비움' : `${esc(UI.num(takenQty))}개 차감`}</div>`
       : '';
 
     const who = [r.requested_by_name, UI.fmtDateTime(r.created_at)].filter(Boolean).join(' · ');
@@ -215,7 +222,7 @@
 
     const actions = (done
       ? '<button type="button" class="btn-ghost btn-sm" data-act="reopen">되돌리기</button>'
-      : `<button type="button" class="btn-primary dp-act-main" data-act="done">${pick ? '완료 · 재고 차감' : '완료'}</button>`) + soldoutHtml(r);
+      : `<button type="button" class="btn-primary dp-act-main" data-act="done">${pick && !UI.isPresenceRack(pick.rack) ? '완료 · 재고 차감' : '완료'}</button>`) + soldoutHtml(r);
 
     return `
       <li class="wl-row${done ? ' is-done' : ''}" data-id="${esc(id)}">
@@ -320,7 +327,7 @@
     Shell.refreshBadges();
   }
 
-  // 스토리지렉 재고가 바뀌었으면 창고맵도 최신으로 맞춘다(실패해도 이 탭에는 영향 없음).
+  // 스토리지렉 재고가 바뀌었으면 창고네비도 최신으로 맞춘다(실패해도 이 탭에는 영향 없음).
   function refreshMap() {
     try {
       if (typeof loadCells === 'function') Promise.resolve(loadCells()).catch(() => {});
@@ -346,6 +353,19 @@
       return;
     }
     const max = rackQty(r, pick.rack);
+    if (UI.isPresenceRack(pick.rack)) {
+      // 칸이 비었다고 했을 때만 그 위치에서 상품을 뺀다. 남아 있으면 '있음' 그대로 둔다.
+      const rack = pick.rack;
+      if (!pick.empty) {
+        if (await setStatus(btn, r, 'done')) UI.toast(`완료 · ${rack}은 있음 그대로 둡니다`, 'ok');
+        return;
+      }
+      if (await setStatus(btn, r, 'done', { rack_code: rack, qty: max })) {
+        UI.toast(`완료 · ${rack}을 비웠습니다`, 'ok');
+        refreshMap();
+      }
+      return;
+    }
     const raw = String(pick.qty ?? '').trim();
     if (!/^\d{1,6}$/.test(raw) || Number(raw) < 1) {
       UI.toast('가져올 수량을 1 이상의 숫자로 입력해 주세요', 'error');
@@ -368,10 +388,14 @@
   async function reopenRow(btn, r) {
     const qty = numOrNull(r.taken_qty);
     const restore = !!(r.taken_rack_code && qty);
-    if (restore && !(await UI.confirm(
-      `${r.item_code}\n차감했던 ${UI.num(qty)}개를 ${r.taken_rack_code}에 되돌리고 미완료로 바꿀까요?`))) return;
+    const presence = UI.isPresenceRack(r.taken_rack_code);
+    if (restore && !(await UI.confirm(presence
+      ? `${r.item_code}\n비웠던 ${r.taken_rack_code}을 다시 있음으로 되돌리고 미완료로 바꿀까요?`
+      : `${r.item_code}\n차감했던 ${UI.num(qty)}개를 ${r.taken_rack_code}에 되돌리고 미완료로 바꿀까요?`))) return;
     if (await setStatus(btn, r, 'open') && restore) {
-      UI.toast(`${r.taken_rack_code}에 ${UI.num(qty)}개를 되돌렸습니다`, 'info');
+      UI.toast(presence
+        ? `${r.taken_rack_code}을 다시 있음으로 되돌렸습니다`
+        : `${r.taken_rack_code}에 ${UI.num(qty)}개를 되돌렸습니다`, 'info');
       refreshMap();
     }
   }
@@ -444,10 +468,12 @@
 
   function onInput(ev) {
     const input = ev.target;
-    if (!input || !input.matches || !input.matches('input[data-role="take-qty"]')) return;
+    if (!input || !input.matches) return;
     const li = input.closest('li.wl-row');
     const pick = li && state.pick.get(li.dataset.id);
-    if (pick) pick.qty = input.value;
+    if (!pick) return;
+    if (input.matches('input[data-role="take-empty"]')) pick.empty = input.checked;
+    else if (input.matches('input[data-role="take-qty"]')) pick.qty = input.value;
   }
 
   function onKeyDown(ev) {

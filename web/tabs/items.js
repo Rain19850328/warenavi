@@ -352,7 +352,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
   async function applyScan(c) {
     if (!c) return;
     if (c.kind === 'rack') {
-      // 랙 코드는 창고맵 검색으로 넘긴다.
+      // 랙 코드는 창고네비 검색으로 넘긴다.
       if (Shell.show('map') === false) return;
       const input = document.querySelector('#search');
       const button = document.querySelector('#btnSearch');
@@ -480,6 +480,13 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
     const packed = hasPackaging(item);
     const loc = isNoLocation(item.location) ? `${item.location || '00'} (미지정)` : item.location;
     const updated = UI.fmtDateTime(item.status_updated_at);
+    // 스토리지렉은 렉 줄(SR1/SR2/SR3)별로 보여 준다. SR2는 수량을 세지 않아 있음/없음만 본다.
+    const racks = (Array.isArray(st.racks) ? st.racks : []).filter(r => r && r.rack_code);
+    const rowQty = row => racks
+      .filter(r => String(r.rack_code).toUpperCase().startsWith(`${row}-`))
+      .reduce((sum, r) => sum + (Number(r.qty) || 0), 0);
+    const sr2Text = racks.some(r => UI.isPresenceRack(r.rack_code)) ? '있음' : '없음';
+    const sr3Qty = rowQty('SR3');
     return `
       <div class="ti-card">
         <div class="ti-card-head">
@@ -499,8 +506,10 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
         <div class="ti-section">
           <h3>재고정보</h3>
           <div class="ti-stock">
-            <span>총 재고<b>${esc(UI.num(st.total))}</b></span>
-            <span>스토리지렉 합계<b>${esc(UI.num(st.rack_total))}</b></span>
+            <span>SR1:<b>${esc(UI.num(rowQty('SR1')))}</b></span>
+            <span>SR2:<b>${esc(sr2Text)}</b></span>
+            ${sr3Qty > 0 ? `<span>SR3:<b>${esc(UI.num(sr3Qty))}</b></span>` : ''}
+            <span>총재고:<b>${esc(UI.num(st.total))}</b></span>
           </div>
           <div class="ti-racks">${UI.rackChips(st.racks)}</div>
         </div>
@@ -510,7 +519,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
           <button type="button" class="btn-primary is-wide" data-act="edit">수정</button>
         </div>
         ${state.noteFor ? noteFormHtml(state.noteFor, item) : ''}
-        <button type="button" class="ti-link" data-act="logs">이 상품 작업로그 보기</button>
+        ${Shell.can('logs') ? '<button type="button" class="ti-link" data-act="logs">이 상품 작업로그 보기</button>' : ''}
       </div>`;
   }
 

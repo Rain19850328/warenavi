@@ -11,9 +11,9 @@
     { id: 'stockcheck', label: '재고확인', min: 'manager' },
     { id: 'display', label: '진열보충', min: 'manager' },
     { id: 'newinbound', label: '신규입고', min: 'admin' },
-    { id: 'map', label: '창고맵', min: 'manager' },
+    { id: 'map', label: '창고네비', min: 'manager' },
     { id: 'soldout', label: '품절관리', min: 'admin' },
-    { id: 'logs', label: '작업로그', min: 'staff' },
+    { id: 'logs', label: '작업로그', min: 'manager' },
     { id: 'users', label: '권한설정', min: 'admin' },
   ];
   const VIEW_IDS = TABS.map(t => t.id);
@@ -57,7 +57,7 @@
     else console.warn(message);
   }
 
-  // 창고맵에서 랙 셀을 고르는 중인지(신규입고 위치선택 / 이동 대상 선택)
+  // 창고네비에서 랙 셀을 고르는 중인지(신규입고 위치선택 / 이동 대상 선택)
   function isPicking() {
     try { if (typeof NEW_INBOUND !== 'undefined' && NEW_INBOUND && NEW_INBOUND.picking) return true; } catch (_) {}
     try { if (typeof MOVE !== 'undefined' && MOVE && MOVE.reopenAfterPick) return true; } catch (_) {}
@@ -392,7 +392,7 @@
     });
   }
 
-  // 첫 화면이 창고맵이 아니면, app.js 준비가 끝나기 전에 창고맵이 잠깐 비치지 않도록 미리 가려 둔다.
+  // 첫 화면이 창고네비이 아니면, app.js 준비가 끝나기 전에 창고네비이 잠깐 비치지 않도록 미리 가려 둔다.
   (function hideOtherViewsEarly() {
     const first = parseHash(location.hash).id;
     for (const viewId of VIEW_IDS) {
