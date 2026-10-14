@@ -1,6 +1,6 @@
-// tabs/stockcheck.js — 재고확인 탭
-// 날짜별 재고확인 대상(자동 + 요청)을 보여 주고 일치/불일치를 기록한다. 총 재고(MOPS가 넣는 값)는 바꾸지 않는다.
-// 카드의 렉 상자에서는 상품조회 탭처럼 스토리지렉 재고를 바로 출고·입고할 수 있다.
+// tabs/stockcheck.js — 재고실사 탭
+// 날짜별 재고실사 대상(자동 + 요청)을 보여 주고 일치/불일치를 기록한다. 총 재고(MOPS가 넣는 값)는 바꾸지 않는다.
+// 카드의 렉 상자에서는 상품검색 탭처럼 스토리지렉 재고를 바로 출고·입고할 수 있다.
 (function () {
   'use strict';
 
@@ -80,7 +80,7 @@
   const STATUS_OPTS = [['all', '전체'], ['pending', '미확인'], ['match', '일치'], ['mismatch', '불일치']];
   const SOURCE_LABEL = {
     auto_low_stock: ['자동', 'muted'],
-    item: ['상품조회 요청', 'info'],
+    item: ['상품검색 요청', 'info'],
     irregular: ['이형포장 요청', 'info'],
   };
 
@@ -89,7 +89,7 @@
     bodyEl: null,
     dateBar: null,
     date: '',
-    openMode: false,          // 미처리 불일치만 보기(전 날짜). 상품조회 첫 화면의 바로가기로만 켜진다
+    openMode: false,          // 미처리 불일치만 보기(전 날짜). 상품검색 첫 화면의 바로가기로만 켜진다
     items: [],
     index: new Map(),         // String(id) -> row
     loadedKey: null,          // 지금 items가 어느 조회의 결과인지
@@ -198,9 +198,9 @@
 
   /* ---------- rendering ---------- */
   function soldoutHtml(r) {
-    if (r.in_soldout) return UI.chip('품절관리 등록됨', 'muted');
+    if (r.in_soldout) return UI.chip('품절처리 등록됨', 'muted');
     const urgent = numOrNull(r.counted_qty) === 0 || numOrNull(r.stock_today) === 0;
-    return `<button type="button" class="${urgent ? 'btn-danger' : 'btn-ghost btn-sm'}" data-act="soldout">품절관리에 추가</button>`;
+    return `<button type="button" class="${urgent ? 'btn-danger' : 'btn-ghost btn-sm'}" data-act="soldout">품절처리에 추가</button>`;
   }
 
   // 미확인 줄은 '일치'가 기록할 지금 재고를, 확인한 줄은 확인 당시 재고를 보여 준다.
@@ -221,7 +221,7 @@
     if (r.status === 'match' || r.status === 'mismatch') {
       parts.push(UI.chip(r.status === 'match' ? '일치' : '불일치', r.status === 'match' ? 'ok' : 'danger'));
       if (r.status === 'mismatch' && r.resolved) parts.push(UI.chip('처리완료', 'ok'));
-      // 관리자가 확인요청 탭에서 내린 판단
+      // 관리자가 실사반영 탭에서 내린 판단
       const review = { applied: ['반영', 'ok'], held: ['보류', 'warn'], rejected: ['미반영', 'muted'] }[r.review_status];
       if (r.status === 'mismatch' && review) parts.push(UI.chip(review[0], review[1]));
       const counted = numOrNull(r.counted_qty);
@@ -246,7 +246,7 @@
     return (Array.isArray(r && r.racks) ? r.racks : []).filter(x => x && x.rack_code);
   }
 
-  // 상품조회 탭의 재고정보와 같은 표기: SR1은 수량(없으면 '없음'), SR2는 있음/없음.
+  // 상품검색 탭의 재고정보와 같은 표기: SR1은 수량(없으면 '없음'), SR2는 있음/없음.
   function stockInfoHtml(r) {
     const racks = rackListOf(r);
     const rowQty = row => racks
@@ -261,7 +261,7 @@
             ${sr3 > 0 ? `<span>SR3:<b>${esc(UI.num(sr3))}</b></span>` : ''}</div>`;
   }
 
-  // 렉 위치별 수량 상자. 누르면 그 위치에서 출고, '+ 입고'로 입고(상품조회 탭과 같은 동작).
+  // 렉 위치별 수량 상자. 누르면 그 위치에서 출고, '+ 입고'로 입고(상품검색 탭과 같은 동작).
   function racksHtml(r, rackForm) {
     const active = rackForm && rackForm.kind === 'out' ? String(rackForm.rack) : '';
     const buttons = rackListOf(r).map(x => {
@@ -273,7 +273,7 @@
             <button type="button" class="btn-sm sc-rack-in" data-act="rack-in">+ 입고</button></div>`;
   }
 
-  // 입고 칸: 고른 구역이 SR2면 수량 칸을 숨긴다. (렉 코드 입력 규칙은 UI.rackCode — 상품조회 탭과 같다)
+  // 입고 칸: 고른 구역이 SR2면 수량 칸을 숨긴다. (렉 코드 입력 규칙은 UI.rackCode — 상품검색 탭과 같다)
   function syncRackForm(form) {
     const presence = UI.isPresenceRack(form.elements.zone.value + '-');
     const qty = form.querySelector('[data-role="rack-qty"]');
@@ -351,6 +351,9 @@
       out.push(`<button type="button" class="btn-danger sc-act-main" data-act="open-mismatch"${formKind === 'mismatch' ? ' disabled' : ''}>불일치</button>`);
     } else if (r.status === 'match') {
       out.push('<button type="button" class="btn-ghost btn-sm" data-act="reset">다시 확인</button>');
+    } else if (r.playauto_status === 'sent') {
+      // 플레이오토로 보낸 재고는 되돌릴 수 없다(처리취소·수정·다시 확인 모두 막힘).
+      out.push(UI.chip('플레이오토 전송 완료', 'ok'));
     } else if (r.resolved) {
       out.push('<button type="button" class="btn-ghost btn-sm" data-act="unresolve">처리취소</button>');
     } else {
@@ -358,7 +361,7 @@
       out.push(`<button type="button" class="btn-ghost btn-sm" data-act="open-mismatch"${formKind === 'mismatch' ? ' disabled' : ''}>수량·사유 수정</button>`);
       out.push('<button type="button" class="btn-ghost btn-sm" data-act="reset">다시 확인</button>');
     }
-    // 품절관리 추가는 일치·불일치를 기록한 뒤에만 보인다.
+    // 품절처리 추가는 일치·불일치를 기록한 뒤에만 보인다.
     if (r.status !== 'pending') out.push(soldoutHtml(r));
     return out.join('');
   }
@@ -403,7 +406,7 @@
       <li class="${cls.join(' ')}" data-id="${esc(id)}">
         <div class="wl-main">
           <div class="sc-top"><span class="sc-loc">${esc(locText(r.location_code))}</span>${chips.join('')}</div>
-          <button type="button" class="wl-name sc-name" data-act="open-item" title="상품조회에서 보기">${esc(r.item_name || r.item_code)}</button>
+          <button type="button" class="wl-name sc-name" data-act="open-item" title="상품검색에서 보기">${esc(r.item_name || r.item_code)}</button>
           ${stockInfoHtml(r)}
           ${racksHtml(r, rackForm)}
           ${rackForm ? rackFormHtml(r, rackForm) : ''}
@@ -428,7 +431,7 @@
     if (state.phase !== 'ready') { body.innerHTML = ''; return; }
 
     if (!state.items.length) {
-      body.innerHTML = stateHtml(state.openMode ? '미처리 불일치가 없습니다.' : `${state.date} 에는 재고확인 대상이 없습니다.`);
+      body.innerHTML = stateHtml(state.openMode ? '미처리 불일치가 없습니다.' : `${state.date} 에는 재고실사 대상이 없습니다.`);
       return;
     }
     const rows = sortRows(state.items.filter(isVisible));
@@ -521,7 +524,7 @@
     return true;
   }
 
-  // 일치로 확인한 재고가 기준 미만이면 품절관리에 자동으로 올린다.
+  // 일치로 확인한 재고가 기준 미만이면 품절처리에 자동으로 올린다.
   const AUTO_SOLDOUT_BELOW = 10;
   async function autoSoldout(id) {
     const r = state.index.get(String(id));
@@ -534,12 +537,12 @@
       const cur = state.index.get(String(id));
       if (cur) { cur.in_soldout = true; replaceRow(id); }
       UI.toast(res && res.created === false
-        ? `재고 ${UI.num(qty)}개 · 이미 품절관리에 있는 상품입니다`
-        : `재고 ${UI.num(qty)}개 · 품절관리에 자동으로 추가했습니다`, 'info');
+        ? `재고 ${UI.num(qty)}개 · 이미 품절처리에 있는 상품입니다`
+        : `재고 ${UI.num(qty)}개 · 품절처리에 자동으로 추가했습니다`, 'info');
       Shell.refreshBadges();
     } catch (err) {
       if (!err || err.code !== 'AUTH_REQUIRED') {
-        UI.toast(`품절관리 자동 추가 실패: ${(err && err.message) || '요청에 실패했습니다.'}`, 'error');
+        UI.toast(`품절처리 자동 추가 실패: ${(err && err.message) || '요청에 실패했습니다.'}`, 'error');
       }
     }
   }
@@ -704,7 +707,7 @@
           item_code: r.item_code, source: 'stock_check', source_id: r.id,
         }));
         if (res === undefined) return;
-        UI.toast(res && res.created === false ? '이미 품절관리에 있는 상품입니다' : '품절관리에 추가했습니다', res && res.created === false ? 'info' : 'ok');
+        UI.toast(res && res.created === false ? '이미 품절처리에 있는 상품입니다' : '품절처리에 추가했습니다', res && res.created === false ? 'info' : 'ok');
         const cur = state.index.get(id);
         if (cur) { cur.in_soldout = true; replaceRow(id); }
         Shell.refreshBadges();
@@ -788,7 +791,7 @@
     state.date = today();
     root.classList.add('tab-stockcheck');
     root.innerHTML = `
-      <div class="view-head"><h2>재고확인</h2><div class="sc-datebar"></div></div>
+      <div class="view-head"><h2>재고실사</h2><div class="sc-datebar"></div></div>
       <div class="view-toolbar sc-toolbar">
         ${segHtml('status', 'f-status', STATUS_OPTS)}
         <button type="button" class="btn-sm sc-toggle" data-act="toggle-disc" aria-pressed="false">단종 제외</button>
@@ -815,7 +818,7 @@
       state.dateBar.set(p.date);
       state.openMode = false;
     } else {
-      // 상품조회 첫 화면의 '불일치 미처리' 바로가기로 들어왔을 때만 켠다. 탭을 다시 누르면 평소 화면으로 돌아온다.
+      // 상품검색 첫 화면의 '불일치 미처리' 바로가기로 들어왔을 때만 켠다. 탭을 다시 누르면 평소 화면으로 돌아온다.
       state.openMode = String(p.open) === '1';
     }
     syncToolbar();
@@ -835,5 +838,5 @@
     return true;
   }
 
-  Shell.register({ id: 'stockcheck', label: '재고확인', mount, onShow, onHide, onRemoteChange });
+  Shell.register({ id: 'stockcheck', label: '재고실사', mount, onShow, onHide, onRemoteChange });
 })();

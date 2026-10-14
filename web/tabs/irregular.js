@@ -223,7 +223,7 @@
         <div class="irr-line-body">
           <div class="irr-info">
             <div class="irr-loc">${esc(locText(line.location_code))}</div>
-            <button type="button" class="wl-name irr-name" data-act="open-item" title="상품조회에서 보기">${esc(line.item_name || line.item_code)}</button>
+            <button type="button" class="wl-name irr-name" data-act="open-item" title="상품검색에서 보기">${esc(line.item_name || line.item_code)}</button>
             <div class="wl-meta"><span>재고 ${esc(UI.num(line.stock_today))}</span> ${UI.rackChips(line.racks)}</div>
           </div>
           <div class="irr-side">

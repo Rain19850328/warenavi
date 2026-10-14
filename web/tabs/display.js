@@ -69,7 +69,7 @@
 
   const STATUS_OPTS = [['all', '전체'], ['open', '미완료'], ['done', '완료']];
   const SOURCE_LABEL = {
-    item: ['상품조회 요청', 'info'],
+    item: ['상품검색 요청', 'info'],
     irregular: ['이형포장 요청', 'info'],
   };
 
@@ -137,7 +137,7 @@
     return 'muted';
   }
 
-  // 영어(A~Z) 다음에 한글(가나다) 순(재고확인 탭과 같은 규칙).
+  // 영어(A~Z) 다음에 한글(가나다) 순(재고실사 탭과 같은 규칙).
   const cmp = (a, b) => String(a ?? '').localeCompare(String(b ?? ''), 'en', { numeric: true });
   const GROUP_NONE = '(none)';   // 스토리지렉 재고 없음: 렉 묶음들 뒤
   const GROUP_DONE = '(done)';   // 완료: 맨 뒤
@@ -198,9 +198,9 @@
 
   /* ---------- rendering ---------- */
   function soldoutHtml(r) {
-    if (r.in_soldout) return UI.chip('품절관리 등록됨', 'muted');
+    if (r.in_soldout) return UI.chip('품절처리 등록됨', 'muted');
     const urgent = !hasRacks(r) && numOrNull(r.stock_today) === 0;
-    return `<button type="button" class="${urgent ? 'btn-danger' : 'btn-ghost btn-sm'}" data-act="soldout">품절관리에 추가</button>`;
+    return `<button type="button" class="${urgent ? 'btn-danger' : 'btn-ghost btn-sm'}" data-act="soldout">품절처리에 추가</button>`;
   }
 
   function rowHtml(r) {
@@ -214,7 +214,7 @@
     }
     if (r.stock_status) chips.push(UI.chip(r.stock_status, statusTone(r.stock_status)));
 
-    // 재고확인 탭과 같은 재고정보 표기: SR1은 수량(없으면 '없음'), SR2는 있음/없음.
+    // 재고실사 탭과 같은 재고정보 표기: SR1은 수량(없으면 '없음'), SR2는 있음/없음.
     const rowQty = row => rackList(r)
       .filter(x => String(x.rack_code).toUpperCase().startsWith(`${row}-`))
       .reduce((sum, x) => sum + (Number(x.qty) || 0), 0);
@@ -275,7 +275,7 @@
       <li class="wl-row${done ? ' is-done' : ''}" data-id="${esc(id)}">
         <div class="wl-main">
           <div class="dp-top"><span class="dp-loc">${esc(locText(r.location_code))}</span>${chips.join('')}</div>
-          <button type="button" class="wl-name dp-name" data-act="open-item" title="상품조회에서 보기">${esc(r.item_name || r.item_code)}</button>
+          <button type="button" class="wl-name dp-name" data-act="open-item" title="상품검색에서 보기">${esc(r.item_name || r.item_code)}</button>
           ${stockInfo}
           ${racks}
           ${taken}
@@ -515,7 +515,7 @@
       }));
       if (res === undefined) return;
       const existed = !!res && res.created === false;
-      UI.toast(existed ? '이미 품절관리에 있는 상품입니다' : '품절관리에 추가했습니다', existed ? 'info' : 'ok');
+      UI.toast(existed ? '이미 품절처리에 있는 상품입니다' : '품절처리에 추가했습니다', existed ? 'info' : 'ok');
       const cur = state.index.get(id);
       if (cur) { cur.in_soldout = true; replaceRow(id); }
       Shell.refreshBadges();

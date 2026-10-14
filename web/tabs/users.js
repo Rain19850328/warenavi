@@ -3,8 +3,8 @@
   'use strict';
 
   const ROLES = [
-    { id: 'staff', label: '직원', help: '상품조회 · 이형포장' },
-    { id: 'manager', label: '매니저', help: '직원 + 재고확인 · 진열보충 · 창고네비 · 작업로그' },
+    { id: 'staff', label: '직원', help: '상품검색 · 이형포장' },
+    { id: 'manager', label: '매니저', help: '직원 + 진열보충 · 재고실사 · 창고지도 · 작업기록' },
     { id: 'admin', label: '관리자', help: '모든 탭 + 권한설정' },
   ];
   const ROLE_RANK = { staff: 1, manager: 2, admin: 3 };

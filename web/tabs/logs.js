@@ -1,4 +1,4 @@
-// tabs/logs.js — 작업로그 탭: 앱에서 일어난 모든 작업 기록 조회 (SKU코드 · 상품명 · 로케이션코드 검색)
+// tabs/logs.js — 작업기록 탭: 앱에서 일어난 모든 작업 기록 조회 (SKU코드 · 상품명 · 로케이션코드 검색)
 (function () {
   'use strict';
 
@@ -10,10 +10,10 @@
   const CATEGORIES = [
     { id: 'all', label: '전체' },
     { id: 'item', label: '상품수정' },
-    { id: 'stockcheck', label: '재고확인' },
+    { id: 'stockcheck', label: '재고실사' },
     { id: 'display', label: '진열보충' },
     { id: 'irregular', label: '이형포장' },
-    { id: 'soldout', label: '품절관리' },
+    { id: 'soldout', label: '품절처리' },
     { id: 'movement', label: '랙 입출고' },
   ];
 
@@ -28,10 +28,10 @@
   };
 
   const SOURCE_LABELS = {
-    item: '상품조회',
+    item: '상품검색',
     irregular: '이형포장',
     auto_low_stock: '자동',
-    stock_check: '재고확인',
+    stock_check: '재고실사',
     display: '진열보충',
   };
 
@@ -88,33 +88,33 @@
         return `${label}: ${val(c.old)} → ${val(c.new)}`;
       }).join(' · ')];
     },
-    soldout_decide: d => ['품절관리', d.decision ? 'info' : 'muted', 'soldout',
+    soldout_decide: d => ['품절처리', d.decision ? 'info' : 'muted', 'soldout',
       d.decision ? `판단: ${d.decision}` : `판단 취소${d.was ? ` (${d.was})` : ''}`],
     stock_status_change: d => {
       const viaSoldout = d.via === 'soldout';
       return ['재고상태', 'warn', viaSoldout ? 'soldout' : 'item',
-        `재고상태: ${val(d.old)} → ${val(d.new)}${viaSoldout ? ' (품절관리)' : ''}`];
+        `재고상태: ${val(d.old)} → ${val(d.new)}${viaSoldout ? ' (품절처리)' : ''}`];
     },
-    stock_check_auto: d => ['재고확인', 'muted', 'stockcheck', `자동 대상 ${count(d.count)}건 추가`],
-    stock_check_request: d => ['재고확인', 'info', 'stockcheck', joinParts([withSource('요청', d.source), d.note])],
-    stock_check_match: d => ['재고확인', 'ok', 'stockcheck', `일치 (재고 ${count(d.db_stock)})`],
-    stock_check_mismatch: d => ['재고확인', 'danger', 'stockcheck',
+    stock_check_auto: d => ['재고실사', 'muted', 'stockcheck', `자동 대상 ${count(d.count)}건 추가`],
+    stock_check_request: d => ['재고실사', 'info', 'stockcheck', joinParts([withSource('요청', d.source), d.note])],
+    stock_check_match: d => ['재고실사', 'ok', 'stockcheck', `일치 (재고 ${count(d.db_stock)})`],
+    stock_check_mismatch: d => ['재고실사', 'danger', 'stockcheck',
       joinParts([`불일치: DB ${count(d.db_stock)} / 실재고 ${count(d.counted_qty)}`, d.reason])],
-    stock_check_reset: () => ['재고확인', 'muted', 'stockcheck', '확인 취소'],
-    stock_check_resolve: d => ['재고확인', 'ok', 'stockcheck', joinParts(['처리완료', d.note])],
-    stock_check_reopen: () => ['재고확인', 'warn', 'stockcheck', '처리 취소'],
+    stock_check_reset: () => ['재고실사', 'muted', 'stockcheck', '확인 취소'],
+    stock_check_resolve: d => ['재고실사', 'ok', 'stockcheck', joinParts(['처리완료', d.note])],
+    stock_check_reopen: () => ['재고실사', 'warn', 'stockcheck', '처리 취소'],
     stock_check_review: d => {
       const decision = text(d.decision);
       const label = { applied: '반영', held: '보류', rejected: '미반영', pending: '판단 취소' }[decision] || decision;
       const tone = { applied: 'ok', held: 'warn', rejected: 'muted', pending: 'warn' }[decision] || 'muted';
-      return ['확인요청', tone, 'stockcheck',
+      return ['실사반영', tone, 'stockcheck',
         joinParts([`${label}: DB ${count(d.db_stock)} / 실재고 ${count(d.counted_qty)}`, d.note])];
     },
     stock_check_playauto: d => {
       const status = text(d.status);
       const label = { sent: '플레이오토 전송 완료', failed: '플레이오토 전송 실패', pending: '플레이오토 전송 대기' }[status] || status;
       const tone = { sent: 'ok', failed: 'danger', pending: 'warn' }[status] || 'muted';
-      return ['확인요청', tone, 'stockcheck', joinParts([`${label} (실재고 ${count(d.counted_qty)})`, d.message])];
+      return ['실사반영', tone, 'stockcheck', joinParts([`${label} (실재고 ${count(d.counted_qty)})`, d.message])];
     },
     display_request: d => ['진열보충', 'info', 'display', joinParts(['진열 요청', d.note])],
     display_done: d => ['진열보충', 'ok', 'display', joinParts(['진열 완료', d.rack_code ? `${text(d.rack_code)}에서 ${count(d.qty)}개 차감` : ''])],
@@ -134,8 +134,8 @@
     irregular_status: d => ['이형포장', 'info', 'irregular', joinParts([`상태: ${val(d.old)} → ${val(d.new)}`, d.bundle_no ? `묶음 ${text(d.bundle_no)}` : ''])],
     irregular_box_count: d => ['이형포장', 'muted', 'irregular',
       joinParts([`예상박스: ${val(d.old, '미입력')} → ${val(d.new, '미입력')}`, d.bundle_no ? `묶음 ${text(d.bundle_no)}` : ''])],
-    soldout_add: d => ['품절관리', 'danger', 'soldout', withSource('품절관리 등록', d.source)],
-    soldout_remove: () => ['품절관리', 'muted', 'soldout', '품절관리에서 제거'],
+    soldout_add: d => ['품절처리', 'danger', 'soldout', withSource('품절처리 등록', d.source)],
+    soldout_remove: () => ['품절처리', 'muted', 'soldout', '품절처리에서 제거'],
     user_role_change: d => ['권한설정', 'warn', '',
       joinParts([text(d.target_name) || text(d.target_email), `권한: ${roleLabel(d.old)} → ${roleLabel(d.new)}`])],
   };
@@ -315,7 +315,7 @@
     const srcChip = log.source === 'mops' ? UI.chip('MOPS', 'info')
       : log.source === 'system' ? UI.chip('자동', 'muted') : '';
     const meta = [
-      code ? `<button type="button" class="lg-code" data-act="item" data-code="${UI.esc(code)}" title="상품조회에서 열기">${UI.esc(code)}</button>` : '',
+      code ? `<button type="button" class="lg-code" data-act="item" data-code="${UI.esc(code)}" title="상품검색에서 열기">${UI.esc(code)}</button>` : '',
       name ? `<span class="lg-name">${UI.esc(name)}</span>` : '',
       loc ? `<span class="lg-loc" title="로케이션">${UI.esc(loc)}</span>` : '',
       actor || srcChip ? `<span class="lg-actor">${UI.esc(actor)}${srcChip}</span>` : '',
@@ -576,7 +576,7 @@
     root.classList.add('tab-logs');
     root.innerHTML = `
       <div class="view-head">
-        <h2>작업로그</h2>
+        <h2>작업기록</h2>
         <div class="lg-headside">
           <span class="lg-count" data-role="count" aria-live="polite"></span>
           <button type="button" class="btn-sm btn-ghost" data-act="reload">새로고침</button>
@@ -585,7 +585,7 @@
       <form class="view-toolbar lg-search" data-role="search" role="search" autocomplete="off">
         <div class="lg-searchbox">
           <input type="text" data-role="q" inputmode="search" enterkeyhint="search" maxlength="100"
-                 placeholder="SKU코드 · 상품명 · 로케이션코드" aria-label="작업로그 검색" />
+                 placeholder="SKU코드 · 상품명 · 로케이션코드" aria-label="작업기록 검색" />
           <button type="button" class="lg-clear" data-act="clear" aria-label="검색어 지우기" hidden>✕</button>
         </div>
         <button type="button" class="btn-sm" data-scan-for='[data-role="q"]' data-scan-then="submit" title="사진으로 코드 읽기" aria-label="사진으로 코드 읽기">📷</button>
@@ -672,5 +672,5 @@
     return true;
   }
 
-  Shell.register({ id: 'logs', label: '작업로그', mount, onShow, onHide, onRemoteChange, _describe: describe });
+  Shell.register({ id: 'logs', label: '작업기록', mount, onShow, onHide, onRemoteChange, _describe: describe });
 })();

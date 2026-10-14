@@ -1,5 +1,5 @@
-// tabs/soldout.js — 품절관리 탭
-// 재고확인·진열보충에서 품절로 올린 상품을 관리자가 보고 완료 / 보류 / 미반영으로 판단한다(확인요청 탭과 같은 배치).
+// tabs/soldout.js — 품절처리 탭
+// 재고실사·진열보충에서 품절로 올린 상품을 관리자가 보고 완료 / 보류 / 미반영으로 판단한다(실사반영 탭과 같은 배치).
 // 판단은 표시만 남긴다. 재고상태는 바꾸지 않는다.
 (function () {
   'use strict';
@@ -17,8 +17,8 @@
     if (!h) return 'wait';
     return (DECISIONS[h] || { bucket: 'done' }).bucket;
   }
-  const SOURCE_LABEL = { stock_check: '재고확인', display: '진열보충' };
-  const EMPTY_TEXT = "등록된 품절 상품이 없습니다. 재고확인·진열보충에서 '품절관리에 추가'를 누르면 여기에 표시됩니다.";
+  const SOURCE_LABEL = { stock_check: '재고실사', display: '진열보충' };
+  const EMPTY_TEXT = "등록된 품절 상품이 없습니다. 재고실사·진열보충에서 '품절처리에 추가'를 누르면 여기에 표시됩니다.";
   const HINT_TEXT = '재고상태는 MOPS 자동 계산으로 이후 값이 바뀔 수 있습니다.';
 
   const state = {
@@ -56,10 +56,10 @@
     return li ? li.dataset.id : null;
   }
   function cmp(a, b) {
-    // 영어(A~Z) 다음에 한글(가나다) 순(재고확인·진열보충 탭과 같은 규칙).
+    // 영어(A~Z) 다음에 한글(가나다) 순(재고실사·진열보충 탭과 같은 규칙).
     return String(a ?? '').localeCompare(String(b ?? ''), 'en', { numeric: true });
   }
-  // 재고확인 탭과 같은 순서: 로케이션 코드 순, 위치 미지정은 맨 뒤. 판단한 줄도 따로 뒤로 보내지 않는다.
+  // 재고실사 탭과 같은 순서: 로케이션 코드 순, 위치 미지정은 맨 뒤. 판단한 줄도 따로 뒤로 보내지 않는다.
   function sortItems(list) {
     const none = it => (locText(it.location_code) === '위치 미지정' ? 1 : 0);
     return list.slice().sort((a, b) =>
@@ -133,7 +133,7 @@
     const last = it.last_set_status || it.last_set_at
       ? `<div class="wl-meta">최근 변경: ${esc(it.last_set_status || '-')} · ${esc(it.last_set_by_name || '-')}${it.last_set_at ? ' · ' + esc(UI.fmtDateTime(it.last_set_at)) : ''}</div>`
       : '';
-    // 진열보충·재고확인 탭과 같은 재고정보 표기: SR1은 수량(없으면 '없음'), SR2는 있음/없음.
+    // 진열보충·재고실사 탭과 같은 재고정보 표기: SR1은 수량(없으면 '없음'), SR2는 있음/없음.
     const racks = (Array.isArray(it.racks) ? it.racks : []).filter(x => x && x.rack_code);
     const rowQty = row => racks
       .filter(x => String(x.rack_code).toUpperCase().startsWith(`${row}-`))
@@ -152,7 +152,7 @@
             ${sourceChips}
             ${it.item_status ? UI.chip(`판매등급 ${it.item_status}`, 'muted') : ''}
           </div>
-          <button type="button" class="wl-name so-name" data-act="open-item" title="상품조회에서 보기">${esc(it.item_name || it.item_code)}</button>
+          <button type="button" class="wl-name so-name" data-act="open-item" title="상품검색에서 보기">${esc(it.item_name || it.item_code)}</button>
           <div class="so-stock"><span class="so-stock__title">재고정보</span>
             <span>SR1:<b>${sr1 > 0 ? esc(UI.num(sr1)) : '없음'}</b></span>
             <span>SR2:<b>${racks.some(x => UI.isPresenceRack(x.rack_code)) ? '있음' : '없음'}</b></span>
@@ -314,7 +314,7 @@
     state.root = root;
     root.classList.add('tab-soldout');
     root.innerHTML = `
-      <div class="view-head"><h2>품절관리</h2><div data-role="datebar"></div></div>
+      <div class="view-head"><h2>품절처리</h2><div data-role="datebar"></div></div>
       <div class="view-toolbar">
         <div class="seg so-filter" data-role="filter" role="group" aria-label="목록 필터">
           ${FILTERS.map(([key, label]) => `<button type="button" data-act="filter" data-filter="${key}">${label}<span class="so-cnt" data-cnt="${key}"></span></button>`).join('')}
@@ -353,5 +353,5 @@
     return true;
   }
 
-  Shell.register({ id: 'soldout', label: '품절관리', mount, onShow, onHide() {}, onRemoteChange });
+  Shell.register({ id: 'soldout', label: '품절처리', mount, onShow, onHide() {}, onRemoteChange });
 })();

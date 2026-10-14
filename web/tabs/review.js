@@ -1,5 +1,5 @@
-// tabs/review.js — 확인요청 탭(관리자 전용)
-// 재고확인에서 불일치로 기록된 건을 날짜별로 보여 주고, 관리자가 반영 / 보류 / 미반영을 판단한다(품절관리 탭과 같은 배치).
+// tabs/review.js — 실사반영 탭(관리자 전용)
+// 재고실사에서 불일치로 기록된 건을 날짜별로 보여 주고, 관리자가 반영 / 보류 / 미반영을 판단한다(품절처리 탭과 같은 배치).
 // 반영하면 서버가 실재고를 플레이오토로 보낸다. 못 보낸 건은 '전송 대기 / 실패'로 남아 다시 보낼 수 있다.
 (function () {
   'use strict';
@@ -99,7 +99,7 @@
     return numOrNull(r.stock_today) ?? numOrNull(r.db_stock);
   }
   function isDecided(r) { return r.review_status === 'applied' || r.review_status === 'rejected'; }
-  // 재고확인 탭과 같은 순서: 로케이션 코드 영어(A~Z) → 한글(가나다), 숫자는 크기순, 위치 미지정은 맨 뒤.
+  // 재고실사 탭과 같은 순서: 로케이션 코드 영어(A~Z) → 한글(가나다), 숫자는 크기순, 위치 미지정은 맨 뒤.
   function sortRows(rows) {
     const cmp = (x, y) => String(x ?? '').localeCompare(String(y ?? ''), 'en', { numeric: true });
     const none = r => (locText(r.location_code) === '위치 미지정' ? 1 : 0);
@@ -195,7 +195,7 @@
       <li class="${cls.join(' ')}" data-id="${esc(id)}">
         <div class="wl-main">
           <div class="rv-top"><span class="rv-loc">${esc(locText(r.location_code))}</span>${chips.join('')}${stateChip}</div>
-          <button type="button" class="wl-name rv-name" data-act="open-item" title="상품조회에서 보기">${esc(r.item_name || r.item_code)}</button>
+          <button type="button" class="wl-name rv-name" data-act="open-item" title="상품검색에서 보기">${esc(r.item_name || r.item_code)}</button>
           ${compareHtml(r)}
           ${notes.join('')}
           ${checked ? `<div class="wl-meta">불일치 기록: ${esc(checked)}</div>` : ''}
@@ -399,7 +399,7 @@
     state.root = root;
     root.classList.add('tab-review');
     root.innerHTML = `
-      <div class="view-head"><h2>확인요청</h2><div class="rv-datebar"></div></div>
+      <div class="view-head"><h2>실사반영</h2><div class="rv-datebar"></div></div>
       <div class="view-toolbar rv-toolbar">
         <div class="seg" role="group" aria-label="목록 구분">
           ${FILTERS.map(([val, label]) =>
@@ -446,5 +446,5 @@
     return true;
   }
 
-  Shell.register({ id: 'review', label: '확인요청', mount, onShow, onHide, onRemoteChange });
+  Shell.register({ id: 'review', label: '실사반영', mount, onShow, onHide, onRemoteChange });
 })();

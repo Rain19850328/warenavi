@@ -6,15 +6,15 @@
   // 탭바 순서: 자주 쓰는 순(직원 → 매니저 → 관리자). 휴대폰에서는 앞의 4~5칸이 먼저 보인다.
   // min = 이 탭을 볼 수 있는 가장 낮은 권한. 권한이 모자란 탭은 탭바에 나오지 않는다.
   const TABS = [
-    { id: 'items', label: '상품조회', min: 'staff' },
+    { id: 'items', label: '상품검색', min: 'staff' },
     { id: 'irregular', label: '이형포장', min: 'staff' },
-    { id: 'stockcheck', label: '재고확인', min: 'manager' },
     { id: 'display', label: '진열보충', min: 'manager' },
+    { id: 'stockcheck', label: '재고실사', min: 'manager' },
+    { id: 'review', label: '실사반영', min: 'admin' },
+    { id: 'soldout', label: '품절처리', min: 'admin' },
     { id: 'newinbound', label: '신규입고', min: 'admin' },
-    { id: 'map', label: '창고네비', min: 'manager' },
-    { id: 'soldout', label: '품절관리', min: 'admin' },
-    { id: 'review', label: '확인요청', min: 'admin' },
-    { id: 'logs', label: '작업로그', min: 'manager' },
+    { id: 'map', label: '창고지도', min: 'manager' },
+    { id: 'logs', label: '작업기록', min: 'manager' },
     { id: 'users', label: '권한설정', min: 'admin' },
   ];
   const VIEW_IDS = TABS.map(t => t.id);
@@ -311,7 +311,7 @@
       // 권한을 내려주지 않는 예전 서버에서는 지금까지처럼 모든 탭을 보여준다.
       if (typeof c.role === 'string') setRole(c.role, c.role_bootstrap);
       else setRole('admin', false);
-      // 상품조회 첫 화면의 '오늘 할 일' 카드가 같은 숫자를 쓴다.
+      // 상품검색 첫 화면의 '오늘 할 일' 카드가 같은 숫자를 쓴다.
       try { window.dispatchEvent(new CustomEvent('shell:counts')); } catch (_) {}
       setBadge('stockcheck', n(c.stock_check_pending) + n(c.mismatch_open));
       setBadge('display', n(c.display_open));

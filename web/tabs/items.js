@@ -1,4 +1,4 @@
-// tabs/items.js — 상품조회 탭: 검색 → 선택 → 상세 → 수정 / 수량확인·진열 요청
+// tabs/items.js — 상품검색 탭: 검색 → 선택 → 상세 → 수정 / 수량확인·진열 요청
 (function () {
   'use strict';
 
@@ -17,7 +17,7 @@
       title: '수량확인 요청',
       help: '진열랙 수량이 전산 재고와 다를 때 요청합니다.',
       placeholder: '예: 진열랙에 3개만 있음 (선택)',
-      okToast: '재고확인 리스트에 추가했습니다',
+      okToast: '재고실사 리스트에 추가했습니다',
     },
     display: {
       path: '/display_requests/request',
@@ -228,10 +228,10 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
   // 오늘 할 일 카드: /tab_counts 의 값 → 누르면 가는 탭
   const TODOS = [
     { key: 'irregular_open', label: '이형포장', unit: '남은 묶음', tab: 'irregular' },
-    { key: 'stock_check_pending', label: '재고확인', unit: '미확인', tab: 'stockcheck' },
+    { key: 'stock_check_pending', label: '재고실사', unit: '미확인', tab: 'stockcheck' },
     { key: 'mismatch_open', label: '불일치', unit: '미처리', tab: 'stockcheck', params: { open: 1 } },
     { key: 'display_open', label: '진열보충', unit: '미완료', tab: 'display' },
-    { key: 'review_open', label: '확인요청', unit: '판단 대기', tab: 'review' },
+    { key: 'review_open', label: '실사반영', unit: '판단 대기', tab: 'review' },
   ];
 
   // 최근 본 상품은 이 기기(브라우저)에만 저장한다. 저장소를 못 쓰는 환경에서는 그냥 비어 있다.
@@ -621,7 +621,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
           ${canManage() ? '<button type="button" class="btn-primary is-wide" data-act="edit">수정</button>' : ''}
         </div>
         ${state.noteFor ? noteFormHtml(state.noteFor, item) : ''}
-        ${Shell.can('logs') ? '<button type="button" class="ti-link" data-act="logs">이 상품 작업로그 보기</button>' : ''}
+        ${Shell.can('logs') ? '<button type="button" class="ti-link" data-act="logs">이 상품 작업기록 보기</button>' : ''}
       </div>`;
   }
 
@@ -1153,7 +1153,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
     injectStyle();
     root.classList.add('tab-items');
     root.innerHTML = `
-      <div class="view-head"><h2>상품조회</h2></div>
+      <div class="view-head"><h2>상품검색</h2></div>
       <form class="view-toolbar ti-search" data-form="search" role="search" novalidate>
         <input id="tiQuery" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false"
                placeholder="SKU코드 · 로케이션 · 상품명" aria-label="상품 검색" />
@@ -1212,5 +1212,5 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
     return true;
   }
 
-  Shell.register({ id: 'items', label: '상품조회', mount, onShow, onHide, onRemoteChange });
+  Shell.register({ id: 'items', label: '상품검색', mount, onShow, onHide, onRemoteChange });
 })();
