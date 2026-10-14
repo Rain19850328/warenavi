@@ -17,8 +17,8 @@
     if (!h) return 'wait';
     return (DECISIONS[h] || { bucket: 'done' }).bucket;
   }
-  const SOURCE_LABEL = { stock_check: '재고실사', display: '진열보충' };
-  const EMPTY_TEXT = "등록된 품절 상품이 없습니다. 재고실사·진열보충에서 '품절처리에 추가'를 누르면 여기에 표시됩니다.";
+  const SOURCE_LABEL = { stock_check: '재고실사', display: '진열보충', review: '실사반영' };
+  const EMPTY_TEXT = "등록된 품절 상품이 없습니다. 재고실사에서 '일치'로 센 재고나 실사반영에서 '반영'한 재고가 10개 미만이면 여기에 자동으로 표시됩니다.";
   const HINT_TEXT = '재고상태는 MOPS 자동 계산으로 이후 값이 바뀔 수 있습니다.';
 
   const state = {

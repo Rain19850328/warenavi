@@ -33,6 +33,7 @@
     auto_low_stock: '자동',
     stock_check: '재고실사',
     display: '진열보충',
+    review: '실사반영',
   };
 
   // app.js formatMovementType 과 같은 표기

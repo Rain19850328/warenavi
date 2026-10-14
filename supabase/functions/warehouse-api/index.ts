@@ -20,7 +20,7 @@ const ROLE_LABELS: Record<Role, string> = { staff: "직원", manager: "매니저
 // 여기에 없는 경로는 로그인한 누구나 쓸 수 있다(조회, 상품 수정, 요청 보내기, 이형포장 등).
 const ROUTE_MIN_ROLE: Record<string, Role> = {
   "POST /stock_checks/record": "manager",
-  "POST /stock_checks/resolve": "manager",
+  "POST /stock_checks/resolve": "admin",
   "POST /display_requests/status": "manager",
   "POST /soldout_items/add": "manager",
   "POST /inbound": "manager",
@@ -133,7 +133,7 @@ async function callRpc(name: string, args: Record<string, unknown> = {}) {
   return data;
 }
 
-// ---- 플레이오토: 확인요청에서 반영한 실재고를 SKU 재고로 보낸다 ----
+// ---- 플레이오토: 실사반영에서 반영한 실재고를 SKU 재고로 보낸다 ----
 // 주소 · 본문 모양은 PageMaker(backend/agents/publisher/playauto.py)에서 실측으로 확인한 것과 같다.
 // 재고는 실재고(stock_cnt_real)만 바꾼다. 안전재고는 그대로 두고, 그 값이 거절될 때만 실재고에 맞춘다.
 const PLAYAUTO_API = "https://openapi.playauto.io/api";
@@ -904,7 +904,7 @@ Deno.serve(async (req) => {
       return json(req, data);
     }
 
-    // ---- 상품조회 ----
+    // ---- 상품검색 ----
     if (req.method === "GET" && path === "/item_options") {
       return json(req, await callRpc("warehouse_get_item_options"));
     }
@@ -975,7 +975,7 @@ Deno.serve(async (req) => {
         await callRpc("warehouse_post_stock_status", {
           p_item_code: String(payload.item_code ?? "").trim(),
           p_value: String(payload.value ?? "").trim(),
-          p_soldout_id: getUuidParam(payload.soldout_id, "품절관리 항목", false),
+          p_soldout_id: getUuidParam(payload.soldout_id, "품절처리 항목", false),
           p_actor_user_id: auth.userId,
           p_actor_email: auth.email,
           p_actor_name: auth.name,
@@ -983,7 +983,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ---- 재고확인 ----
+    // ---- 재고실사 ----
     if (req.method === "GET" && path === "/stock_checks") {
       const openMismatch = url.searchParams.get("open_mismatch") === "1";
       return json(
@@ -1023,7 +1023,7 @@ Deno.serve(async (req) => {
       return json(
         req,
         await callRpc("warehouse_record_stock_check", {
-          p_id: getUuidParam(payload.id, "재고확인 항목"),
+          p_id: getUuidParam(payload.id, "재고실사 항목"),
           p_result: String(payload.result ?? "").trim(),
           p_counted_qty: countedQty,
           p_reason: String(payload.reason ?? ""),
@@ -1042,7 +1042,7 @@ Deno.serve(async (req) => {
       return json(
         req,
         await callRpc("warehouse_resolve_stock_check", {
-          p_id: getUuidParam(payload.id, "재고확인 항목"),
+          p_id: getUuidParam(payload.id, "재고실사 항목"),
           p_resolved: payload.resolved,
           p_note: String(payload.note ?? ""),
           p_actor_user_id: auth.userId,
@@ -1052,7 +1052,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ---- 확인요청 (불일치 건을 관리자가 반영 / 보류 / 미반영으로 판단) ----
+    // ---- 실사반영 (불일치 건을 관리자가 반영 / 보류 / 미반영으로 판단) ----
     if (req.method === "GET" && path === "/stock_reviews") {
       // all=1 이면 날짜 전체, date 가 오면 그 날짜의 불일치 건(화면에서 대기 / 보류 / 반영 / 미반영으로 나눠 본다).
       const reviewDate = url.searchParams.get("date");
@@ -1080,7 +1080,7 @@ Deno.serve(async (req) => {
       if (!["applied", "held", "rejected", "pending"].includes(decision)) {
         throw new Error("판단 값이 올바르지 않습니다.");
       }
-      const id = getUuidParam(payload.id, "확인요청 항목");
+      const id = getUuidParam(payload.id, "실사반영 항목");
       const decided = await callRpc("warehouse_review_stock_check", {
         p_id: id,
         p_decision: decision,
@@ -1109,9 +1109,9 @@ Deno.serve(async (req) => {
     // 전송 대기 · 실패로 남은 반영 건을 다시 보낸다.
     if (req.method === "POST" && path === "/stock_reviews/send") {
       const payload = await readBody(req);
-      const id = getUuidParam(payload.id, "확인요청 항목");
+      const id = getUuidParam(payload.id, "실사반영 항목");
       const item = await callRpc("warehouse_get_stock_check_item", { p_id: id }) as Record<string, unknown> | null;
-      if (!item) throw new Error("확인요청 항목을 찾을 수 없습니다.");
+      if (!item) throw new Error("실사반영 항목을 찾을 수 없습니다.");
       if (item.review_status !== "applied") throw new Error("반영으로 판단한 항목만 플레이오토로 보낼 수 있습니다.");
       if (item.playauto_status === "sent") throw new Error("이미 플레이오토로 전송된 건입니다.");
       const sent = await sendStockToPlayauto(item.item_code, item.counted_qty);
@@ -1204,7 +1204,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ---- 품절관리 ----
+    // ---- 품절처리 ----
     if (req.method === "GET" && path === "/soldout_items") {
       // all=1 이면 날짜 전체.
       if (url.searchParams.get("all") === "1") {
@@ -1234,13 +1234,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 품절관리 판단 버튼(완료 | 보류 | 미반영): 재고상태는 그대로 두고 판단 표시만 남긴다.
+    // 품절처리 판단 버튼(완료 | 보류 | 미반영): 재고상태는 그대로 두고 판단 표시만 남긴다.
     if (req.method === "POST" && path === "/soldout_items/decide") {
       const payload = await readBody(req);
       return json(
         req,
         await callRpc("warehouse_decide_soldout_item", {
-          p_soldout_id: getUuidParam(payload.id, "품절관리 항목"),
+          p_soldout_id: getUuidParam(payload.id, "품절처리 항목"),
           p_decision: String(payload.decision ?? "").trim(),
           p_actor_user_id: auth.userId,
           p_actor_email: auth.email,
@@ -1249,13 +1249,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 품절관리 판단 취소 / 보류 해제: 판단 표시만 지운다(재고상태는 건드리지 않는다).
+    // 품절처리 판단 취소 / 보류 해제: 판단 표시만 지운다(재고상태는 건드리지 않는다).
     if (req.method === "POST" && path === "/soldout_items/revert") {
       const payload = await readBody(req);
       return json(
         req,
         await callRpc("warehouse_revert_soldout_status", {
-          p_soldout_id: getUuidParam(payload.id, "품절관리 항목"),
+          p_soldout_id: getUuidParam(payload.id, "품절처리 항목"),
           p_actor_user_id: auth.userId,
           p_actor_email: auth.email,
           p_actor_name: auth.name,
@@ -1268,7 +1268,7 @@ Deno.serve(async (req) => {
       return json(
         req,
         await callRpc("warehouse_remove_soldout_item", {
-          p_id: getUuidParam(payload.id, "품절관리 항목"),
+          p_id: getUuidParam(payload.id, "품절처리 항목"),
           p_actor_user_id: auth.userId,
           p_actor_email: auth.email,
           p_actor_name: auth.name,
@@ -1276,7 +1276,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ---- 작업로그 / 탭 뱃지 ----
+    // ---- 작업기록 / 탭 뱃지 ----
     if (req.method === "GET" && path === "/action_logs") {
       // 쿼리스트링에서 '+'가 공백으로 풀린 ISO 오프셋(" 00:00")을 되돌린다.
       const beforeRaw = (url.searchParams.get("before") || "").trim()

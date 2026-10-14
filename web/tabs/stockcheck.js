@@ -82,6 +82,7 @@
     auto_low_stock: ['자동', 'muted'],
     item: ['상품검색 요청', 'info'],
     irregular: ['이형포장 요청', 'info'],
+    display: ['진열보충 요청', 'info'],
   };
 
   const state = {
@@ -355,9 +356,9 @@
       // 플레이오토로 보낸 재고는 되돌릴 수 없다(처리취소·수정·다시 확인 모두 막힘).
       out.push(UI.chip('플레이오토 전송 완료', 'ok'));
     } else if (r.resolved) {
-      out.push('<button type="button" class="btn-ghost btn-sm" data-act="unresolve">처리취소</button>');
+      // 실사반영에서 판단이 끝난 건. 판단은 실사반영 탭에서만 바꾼다.
     } else {
-      out.push(`<button type="button" class="btn-primary" data-act="open-resolve"${formKind === 'resolve' ? ' disabled' : ''}>처리완료</button>`);
+      // 불일치는 실사반영 탭에서 관리자가 판단한다(여기서 닫는 '처리완료'는 두지 않는다).
       out.push(`<button type="button" class="btn-ghost btn-sm" data-act="open-mismatch"${formKind === 'mismatch' ? ' disabled' : ''}>수량·사유 수정</button>`);
       out.push('<button type="button" class="btn-ghost btn-sm" data-act="reset">다시 확인</button>');
     }

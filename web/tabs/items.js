@@ -181,7 +181,8 @@
 .tab-items .ti-note [hidden]{ display: none; }
 .tab-items .ti-actions{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
 .tab-items .ti-actions button{ min-height: 40px; white-space: normal; }
-.tab-items .ti-actions .is-wide{ grid-column: 1 / -1; }
+.tab-items .ti-actions .is-wide,
+.tab-items .ti-actions > button:only-child{ grid-column: 1 / -1; }
 .tab-items .ti-actions .is-requested{ background: #fef3c7; border-color: #fde68a; color: #92400e; }
 .tab-items .ti-note{
   margin-top: 10px; padding: 12px;
@@ -228,9 +229,9 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
   // 오늘 할 일 카드: /tab_counts 의 값 → 누르면 가는 탭
   const TODOS = [
     { key: 'irregular_open', label: '이형포장', unit: '남은 묶음', tab: 'irregular' },
+    { key: 'display_open', label: '진열보충', unit: '미완료', tab: 'display' },
     { key: 'stock_check_pending', label: '재고실사', unit: '미확인', tab: 'stockcheck' },
     { key: 'mismatch_open', label: '불일치', unit: '미처리', tab: 'stockcheck', params: { open: 1 } },
-    { key: 'display_open', label: '진열보충', unit: '미완료', tab: 'display' },
     { key: 'review_open', label: '실사반영', unit: '판단 대기', tab: 'review' },
   ];
 
@@ -616,9 +617,8 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
           ${racksHtml(item)}
         </div>
         <div class="ti-actions">
-          ${requestButtonHtml('stock', item)}
+          ${canManage() ? '<button type="button" class="btn-primary" data-act="edit">수정</button>' : ''}
           ${requestButtonHtml('display', item)}
-          ${canManage() ? '<button type="button" class="btn-primary is-wide" data-act="edit">수정</button>' : ''}
         </div>
         ${state.noteFor ? noteFormHtml(state.noteFor, item) : ''}
         ${Shell.can('logs') ? '<button type="button" class="ti-link" data-act="logs">이 상품 작업기록 보기</button>' : ''}
@@ -1073,7 +1073,6 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       else if (act === 'reload') { if (state.code) loadDetail(state.code); }
       else if (act === 'edit') startEdit(actEl);
       else if (act === 'edit-cancel') { state.mode = 'view'; renderDetail(); }
-      else if (act === 'req-stock') openNote('stock');
       else if (act === 'req-display') openNote('display');
       else if (act === 'note-cancel') { state.noteFor = null; renderDetail(); }
       else if (act === 'rack-out') openRackForm({ kind: 'out', rack: actEl.dataset.rack });

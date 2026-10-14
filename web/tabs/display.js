@@ -197,10 +197,11 @@
   }
 
   /* ---------- rendering ---------- */
-  function soldoutHtml(r) {
-    if (r.in_soldout) return UI.chip('품절처리 등록됨', 'muted');
+  // 재고가 이상하면 재고실사 탭(오늘 날짜)에 이 상품을 올린다. 품절 여부는 재고실사 → 실사반영에서 정해진다.
+  function stockReqHtml(r) {
+    if (r.stock_requested) return UI.chip('재고실사 요청됨', 'muted');
     const urgent = !hasRacks(r) && numOrNull(r.stock_today) === 0;
-    return `<button type="button" class="${urgent ? 'btn-danger' : 'btn-ghost btn-sm'}" data-act="soldout">품절처리에 추가</button>`;
+    return `<button type="button" class="${urgent ? 'btn-danger' : 'btn-ghost btn-sm'}" data-act="stockreq">재고실사 요청</button>`;
   }
 
   function rowHtml(r) {
@@ -269,7 +270,7 @@
 
     const actions = (done
       ? '<button type="button" class="btn-ghost btn-sm" data-act="reopen">되돌리기</button>'
-      : `<button type="button" class="btn-primary dp-act-main" data-act="done">${pick && !UI.isPresenceRack(pick.rack) ? '완료 · 재고 차감' : '완료'}</button>`) + soldoutHtml(r);
+      : `<button type="button" class="btn-primary dp-act-main" data-act="done">${pick && !UI.isPresenceRack(pick.rack) ? '완료 · 재고 차감' : '완료'}</button>`) + stockReqHtml(r);
 
     return `
       <li class="wl-row${done ? ' is-done' : ''}" data-id="${esc(id)}">
@@ -509,15 +510,15 @@
     }
     if (act === 'done') { await completeRow(btn, r); return; }
     if (act === 'reopen') { await reopenRow(btn, r); return; }
-    if (act === 'soldout') {
-      const res = await UI.busy(btn, () => UI.api.post('/soldout_items/add', {
-        item_code: r.item_code, source: 'display', source_id: r.id, date: r.request_date,
+    if (act === 'stockreq') {
+      const res = await UI.busy(btn, () => UI.api.post('/stock_checks/request', {
+        item_code: r.item_code, source: 'display', note: '진열보충 중 요청',
       }));
       if (res === undefined) return;
       const existed = !!res && res.created === false;
-      UI.toast(existed ? '이미 품절처리에 있는 상품입니다' : '품절처리에 추가했습니다', existed ? 'info' : 'ok');
+      UI.toast(existed ? '이미 오늘 재고실사 목록에 있는 상품입니다' : '재고실사 목록에 추가했습니다', existed ? 'info' : 'ok');
       const cur = state.index.get(id);
-      if (cur) { cur.in_soldout = true; replaceRow(id); }
+      if (cur) { cur.stock_requested = true; replaceRow(id); }
       Shell.refreshBadges();
     }
   }

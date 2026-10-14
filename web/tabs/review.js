@@ -323,7 +323,7 @@
 
     state.memos.delete(id);
     const item = applyItem(id, res && res.item);
-    if (decision === 'applied') toastPlayauto(item);
+    if (decision === 'applied') { toastPlayauto(item); autoSoldout(item || r); }
     else if (decision === 'rejected') UI.toast('미반영으로 닫았습니다', 'info');
     else if (decision === 'held') UI.toast('보류로 표시했습니다', 'info');
     else UI.toast('대기 상태로 되돌렸습니다', 'info');
@@ -340,6 +340,25 @@
     replaceRow(id);
     syncToolbar();
     return item;
+  }
+
+  // 반영한 실재고가 기준 미만이면 품절처리에 자동으로 올린다(재고실사의 '일치'와 같은 기준).
+  const AUTO_SOLDOUT_BELOW = 10;
+  async function autoSoldout(r) {
+    const qty = numOrNull(r.counted_qty);
+    if (qty === null || qty >= AUTO_SOLDOUT_BELOW) return;
+    if (r.stock_status === '단종' || r.item_status === '단종') return;   // 단종은 다시 들여오지 않는다
+    try {
+      const res = await UI.api.post('/soldout_items/add', { item_code: r.item_code, source: 'review', source_id: r.id });
+      UI.toast(res && res.created === false
+        ? `실재고 ${UI.num(qty)}개 · 이미 품절처리에 있는 상품입니다`
+        : `실재고 ${UI.num(qty)}개 · 품절처리에 자동으로 추가했습니다`, 'info');
+      Shell.refreshBadges();
+    } catch (err) {
+      if (!err || err.code !== 'AUTH_REQUIRED') {
+        UI.toast(`품절처리 자동 추가 실패: ${(err && err.message) || '요청에 실패했습니다.'}`, 'error');
+      }
+    }
   }
 
   function toastPlayauto(item) {
