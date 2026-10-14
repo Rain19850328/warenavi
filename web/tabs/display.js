@@ -516,7 +516,9 @@
       }));
       if (res === undefined) return;
       const existed = !!res && res.created === false;
-      UI.toast(existed ? '이미 오늘 재고실사 목록에 있는 상품입니다' : '재고실사 목록에 추가했습니다', existed ? 'info' : 'ok');
+      const live = res && res.live && res.live.stock !== null && res.live.stock !== undefined
+        ? ` · 플레이오토 재고 ${UI.num(res.live.stock)}개` : '';
+      UI.toast(`${existed ? '이미 오늘 재고실사 목록에 있는 상품입니다' : '재고실사 목록에 추가했습니다'}${live}`, existed ? 'info' : 'ok');
       const cur = state.index.get(id);
       if (cur) { cur.stock_requested = true; replaceRow(id); }
       Shell.refreshBadges();

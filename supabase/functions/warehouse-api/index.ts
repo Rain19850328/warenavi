@@ -35,6 +35,7 @@ const ROUTE_MIN_ROLE: Record<string, Role> = {
   "POST /soldout_items/revert": "admin",
   "POST /soldout_items/decide": "admin",
   "GET /stock_reviews": "admin",
+  "GET /playauto_usage": "admin",
   "POST /stock_reviews/decide": "admin",
   "POST /stock_reviews/send": "admin",
   "GET /action_logs": "manager",
@@ -139,6 +140,33 @@ async function callRpc(name: string, args: Record<string, unknown> = {}) {
 const PLAYAUTO_API = "https://openapi.playauto.io/api";
 type PlayautoResult = { status: "sent" | "failed" | "pending"; message: string };
 const playautoToken = { token: "", date: "" };   // 하루치 토큰을 재사용한다
+// 플레이오토 호출 한도: 하루 12,000회(오전 9시 초기화), 초당 3회, 재고 수정(작업 API)은 초당 1회.
+// 이 앱이 재고 조회에 쓰는 몫은 PLAYAUTO_DAILY_LIMIT(기본 2,000회)까지. 수정 · 인증은 몫과 상관없이 보낸다.
+const PLAYAUTO_LOOKUP_LIMIT = Number(Deno.env.get("PLAYAUTO_DAILY_LIMIT")) || 2000;
+const PLAYAUTO_TIMEOUT_MS = 8000;
+const playautoPace = { last: 0, lastWork: 0 };
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// 모든 플레이오토 호출은 여기를 지난다: 횟수를 기록하고, 이 서버 안에서 초당 3회 / 수정은 초당 1회를 넘지 않게 띄운다.
+async function playautoFetch(url: string, init: RequestInit, work = false): Promise<Response> {
+  const now = Date.now();
+  const gap = Math.max(0, playautoPace.last + 340 - now, work ? playautoPace.lastWork + 1000 - now : 0);
+  if (gap) await wait(gap);
+  playautoPace.last = Date.now();
+  if (work) playautoPace.lastWork = playautoPace.last;
+  callRpc("warehouse_playauto_take", { p_calls: 1 }).catch(() => {});   // 기록 실패는 호출을 막지 않는다
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), PLAYAUTO_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (err) {
+    if ((err as Error)?.name === "AbortError") throw new Error("플레이오토 응답이 없습니다 (시간 초과)");
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 function playautoKeys() {
   return {
@@ -152,7 +180,7 @@ async function playautoAuth(force = false): Promise<string> {
   const today = new Date().toISOString().slice(0, 10);
   if (!force && playautoToken.token && playautoToken.date === today) return playautoToken.token;
   const keys = playautoKeys();
-  const res = await fetch(`${PLAYAUTO_API}/auth`, {
+  const res = await playautoFetch(`${PLAYAUTO_API}/auth`, {
     method: "POST",
     headers: { "x-api-key": keys.apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({ email: keys.email, password: keys.password }),
@@ -168,7 +196,7 @@ async function playautoAuth(force = false): Promise<string> {
 // 토큰이 만료됐으면 한 번만 다시 받아 재시도한다.
 async function playautoCall(method: "POST" | "PUT", path: string, body: unknown): Promise<Record<string, unknown>> {
   const send = async (token: string) =>
-    await fetch(`${PLAYAUTO_API}${path}`, {
+    await playautoFetch(`${PLAYAUTO_API}${path}`, {
       method,
       headers: {
         "x-api-key": playautoKeys().apiKey,
@@ -176,7 +204,7 @@ async function playautoCall(method: "POST" | "PUT", path: string, body: unknown)
         "Content-Type": "application/json; charset=UTF-8",
       },
       body: JSON.stringify(body),
-    });
+    }, method === "PUT");
   let res = await send(await playautoAuth());
   if (res.status === 401 || res.status === 403) res = await send(await playautoAuth(true));
   const data = await res.json().catch(() => null);
@@ -202,20 +230,54 @@ async function playautoLookup(sku: string): Promise<Record<string, unknown> | nu
   return rows.find((row) => String(row?.sku_cd ?? "") === sku) ?? null;
 }
 
+// 상품 하나의 플레이오토 현재 실재고. 던지지 않는다: 못 읽으면 stock=null 과 이유를 돌려준다.
+type LiveStock = { stock: number | null; message: string };
+async function playautoLiveStock(itemCode: unknown): Promise<LiveStock> {
+  const keys = playautoKeys();
+  if (!keys.apiKey || !keys.email || !keys.password) {
+    return { stock: null, message: "플레이오토 연동 정보가 서버에 등록되지 않았습니다" };
+  }
+  const sku = String(itemCode ?? "").trim();
+  if (!sku) return { stock: null, message: "상품코드가 없습니다" };
+  try {
+    const usage = await callRpc("warehouse_playauto_usage") as { calls?: number } | null;
+    if (Number(usage?.calls ?? 0) >= PLAYAUTO_LOOKUP_LIMIT) {
+      return { stock: null, message: `오늘 플레이오토 조회 한도(${PLAYAUTO_LOOKUP_LIMIT}회)에 도달했습니다` };
+    }
+    const row = await playautoLookup(sku);
+    if (!row) return { stock: null, message: `플레이오토에 등록되지 않은 SKU입니다 (${sku})` };
+    const stock = Number(row.stock_cnt_real);
+    if (!Number.isInteger(stock)) return { stock: null, message: "플레이오토 재고 값을 읽지 못했습니다" };
+    return { stock, message: "" };
+  } catch (err) {
+    return { stock: null, message: String((err as Error)?.message || err).slice(0, 200) };
+  }
+}
+
 // 던지지 않는다. 못 보냈으면 이유를 message 로 돌려준다.
-async function sendStockToPlayauto(itemCode: unknown, countedQty: unknown): Promise<PlayautoResult> {
+// liveAtCount: 재고실사 때 조회한 플레이오토 재고. 있으면 센 뒤에 바뀐 만큼(판매 · 입고) 보정해서 보낸다.
+//   보낼 수량 = 센 수량 + (지금 플레이오토 재고 − 센 때 플레이오토 재고)
+async function sendStockToPlayauto(itemCode: unknown, countedQty: unknown, liveAtCount: unknown = null): Promise<PlayautoResult> {
   const keys = playautoKeys();
   if (!keys.apiKey || !keys.email || !keys.password) {
     return { status: "pending", message: "플레이오토 연동 정보가 서버에 등록되지 않았습니다" };
   }
   const sku = String(itemCode ?? "").trim();
-  const qty = Number(countedQty);
+  let qty = Number(countedQty);
   if (!sku || !Number.isInteger(qty) || qty < 0) {
     return { status: "failed", message: "보낼 상품코드 또는 실재고 수량이 올바르지 않습니다" };
   }
   try {
     const current = await playautoLookup(sku);
     if (!current) return { status: "failed", message: `플레이오토에 등록되지 않은 SKU입니다 (${sku})` };
+    const nowReal = Number(current.stock_cnt_real);
+    const atCount = liveAtCount === null || liveAtCount === undefined || liveAtCount === "" ? NaN : Number(liveAtCount);
+    let note = "";
+    if (Number.isInteger(atCount) && Number.isInteger(nowReal) && nowReal !== atCount) {
+      const moved = nowReal - atCount;   // 음수 = 센 뒤에 팔림, 양수 = 센 뒤에 들어옴
+      qty = Math.max(0, qty + moved);
+      note = ` (센 수량 ${countedQty}, 센 뒤 ${moved < 0 ? `판매 ${-moved}` : `입고 ${moved}`} 반영)`;
+    }
     const depotNo = Number(current.depot_no) || Number(Deno.env.get("PLAYAUTO_DEPOT_NO"));
     if (!depotNo) return { status: "failed", message: "플레이오토 배송처 코드를 알 수 없습니다" };
     const safeNow = Math.max(0, Number(current.stock_cnt_safe) || 0);
@@ -243,7 +305,7 @@ async function sendStockToPlayauto(itemCode: unknown, countedQty: unknown): Prom
         message: `전송했지만 플레이오토 실재고가 ${Number.isFinite(now) ? now : "확인 불가"}(으)로 조회됩니다 (보낸 값 ${qty})`,
       };
     }
-    return { status: "sent", message: `실재고 ${Number(current.stock_cnt_real)} → ${qty}` };
+    return { status: "sent", message: `실재고 ${nowReal} → ${qty}${note}` };
   } catch (err) {
     return { status: "failed", message: String((err as Error)?.message || err).slice(0, 300) };
   }
@@ -997,18 +1059,21 @@ Deno.serve(async (req) => {
 
     if (req.method === "POST" && path === "/stock_checks/request") {
       const payload = await readBody(req);
-      return json(
-        req,
-        await callRpc("warehouse_request_stock_check", {
-          p_item_code: String(payload.item_code ?? "").trim(),
-          p_source: String(payload.source ?? "").trim(),
-          p_note: String(payload.note ?? ""),
-          p_date: getDateParam(payload.date),
-          p_actor_user_id: auth.userId,
-          p_actor_email: auth.email,
-          p_actor_name: auth.name,
-        }),
-      );
+      const itemCode = String(payload.item_code ?? "").trim();
+      const source = String(payload.source ?? "").trim();
+      // 진열보충에서 요청할 때만 플레이오토 현재 재고를 1건 조회해 함께 남긴다.
+      const live: LiveStock | null = source === "display" ? await playautoLiveStock(itemCode) : null;
+      const result = await callRpc("warehouse_request_stock_check", {
+        p_item_code: itemCode,
+        p_source: source,
+        p_note: String(payload.note ?? ""),
+        p_date: getDateParam(payload.date),
+        p_actor_user_id: auth.userId,
+        p_actor_email: auth.email,
+        p_actor_name: auth.name,
+        p_live_stock: live?.stock ?? null,
+      }) as Record<string, unknown>;
+      return json(req, live ? { ...result, live } : result);
     }
 
     if (req.method === "POST" && path === "/stock_checks/record") {
@@ -1020,18 +1085,25 @@ Deno.serve(async (req) => {
           throw new Error("실제 수량은 0 이상의 정수로 입력하세요.");
         }
       }
-      return json(
-        req,
-        await callRpc("warehouse_record_stock_check", {
-          p_id: getUuidParam(payload.id, "재고실사 항목"),
-          p_result: String(payload.result ?? "").trim(),
-          p_counted_qty: countedQty,
-          p_reason: String(payload.reason ?? ""),
-          p_actor_user_id: auth.userId,
-          p_actor_email: auth.email,
-          p_actor_name: auth.name,
-        }),
-      );
+      const id = getUuidParam(payload.id, "재고실사 항목");
+      const result = String(payload.result ?? "").trim();
+      // 일치 / 불일치를 기록할 때 그 상품의 플레이오토 현재 재고를 1건 조회해 비교 기준으로 쓴다.
+      let live: LiveStock | null = null;
+      if (result === "match" || result === "mismatch") {
+        const row = await callRpc("warehouse_get_stock_check_item", { p_id: id }) as Record<string, unknown> | null;
+        if (row) live = await playautoLiveStock(row.item_code);
+      }
+      const recorded = await callRpc("warehouse_record_stock_check", {
+        p_id: id,
+        p_result: result,
+        p_counted_qty: countedQty,
+        p_reason: String(payload.reason ?? ""),
+        p_actor_user_id: auth.userId,
+        p_actor_email: auth.email,
+        p_actor_name: auth.name,
+        p_live_stock: live?.stock ?? null,
+      }) as Record<string, unknown>;
+      return json(req, live ? { ...recorded, live } : recorded);
     }
 
     if (req.method === "POST" && path === "/stock_checks/resolve") {
@@ -1092,7 +1164,7 @@ Deno.serve(async (req) => {
       // 반영이면 판단을 먼저 남기고 플레이오토로 보낸다. 전송이 실패해도 판단은 남고, 화면에서 다시 보낼 수 있다.
       const item = decided?.item;
       if (decision !== "applied" || !item || item.playauto_status === "sent") return json(req, decided);
-      const sent = await sendStockToPlayauto(item.item_code, item.counted_qty);
+      const sent = await sendStockToPlayauto(item.item_code, item.counted_qty, item.live_stock);
       return json(
         req,
         await callRpc("warehouse_set_stock_check_playauto", {
@@ -1106,6 +1178,12 @@ Deno.serve(async (req) => {
       );
     }
 
+    // 오늘 플레이오토 호출 수(오전 9시 기준)와 이 앱의 조회 한도
+    if (req.method === "GET" && path === "/playauto_usage") {
+      const usage = await callRpc("warehouse_playauto_usage") as Record<string, unknown>;
+      return json(req, { ...usage, lookup_limit: PLAYAUTO_LOOKUP_LIMIT, daily_limit: 12000 });
+    }
+
     // 전송 대기 · 실패로 남은 반영 건을 다시 보낸다.
     if (req.method === "POST" && path === "/stock_reviews/send") {
       const payload = await readBody(req);
@@ -1114,7 +1192,7 @@ Deno.serve(async (req) => {
       if (!item) throw new Error("실사반영 항목을 찾을 수 없습니다.");
       if (item.review_status !== "applied") throw new Error("반영으로 판단한 항목만 플레이오토로 보낼 수 있습니다.");
       if (item.playauto_status === "sent") throw new Error("이미 플레이오토로 전송된 건입니다.");
-      const sent = await sendStockToPlayauto(item.item_code, item.counted_qty);
+      const sent = await sendStockToPlayauto(item.item_code, item.counted_qty, item.live_stock);
       return json(
         req,
         await callRpc("warehouse_set_stock_check_playauto", {

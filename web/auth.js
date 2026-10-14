@@ -445,7 +445,7 @@
       window.location.reload();
       return;
     } catch (error) {
-      setStatus(error.message || String(error), true);
+      setStatus(translateSignError(error.message || String(error)), true);
     } finally {
       setBusy("authSigninForm", false);
     }
@@ -477,7 +477,7 @@
       const signinPassword = document.getElementById("authSigninPassword");
       if (signinPassword) signinPassword.value = "";
     } catch (error) {
-      setStatus(error.message || String(error), true);
+      setStatus(translateSignError(error.message || String(error)), true);
     } finally {
       setBusy("authSignupForm", false);
     }
@@ -498,6 +498,21 @@
       const el = document.getElementById(id);
       if (el) el.value = "";
     });
+  }
+
+  // 로그인 · 회원가입 화면의 영어 오류를 읽을 수 있는 문장으로 바꾼다.
+  function translateSignError(message) {
+    const text = String(message || "");
+    if (/email rate limit/i.test(text)) {
+      return "가입 확인 메일 발송 한도를 넘었습니다. 잠시 후(약 1시간) 다시 시도하거나 관리자에게 알려 주세요.";
+    }
+    if (/rate limit|too many requests/i.test(text)) return "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.";
+    if (/already registered|already exists/i.test(text)) return "이미 가입된 이메일입니다. 로그인해 주세요.";
+    if (/invalid login credentials/i.test(text)) return "이메일 또는 비밀번호가 올바르지 않습니다.";
+    if (/email not confirmed/i.test(text)) return "이메일 인증이 끝나지 않았습니다. 받은 메일의 확인 링크를 눌러 주세요.";
+    if (/at least \d+ characters/i.test(text)) return "비밀번호는 6자 이상이어야 합니다.";
+    if (/invalid.*email|email.*invalid/i.test(text)) return "이메일 주소 형식이 올바르지 않습니다.";
+    return text || "요청에 실패했습니다.";
   }
 
   function translateAuthError(message) {

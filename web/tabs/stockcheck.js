@@ -53,6 +53,7 @@
 .tab-stockcheck .sc-total__label{ font-size: 12px; font-weight: 600; color: #64748b; }
 .tab-stockcheck .sc-total__num{ font-size: 30px; font-weight: 800; color: #0f172a; }
 .tab-stockcheck .sc-total__num.is-zero{ color: #b91c1c; }
+.tab-stockcheck .sc-live{ color: #075985; font-weight: 600; }
 .tab-stockcheck .sc-note{
   margin-top: 6px; padding: 6px 8px; border-radius: 8px;
   background: #f1f5f9; font-size: 13px; line-height: 1.4; color: #334155; word-break: break-word;
@@ -205,6 +206,28 @@
   }
 
   // 미확인 줄은 '일치'가 기록할 지금 재고를, 확인한 줄은 확인 당시 재고를 보여 준다.
+  function hhmm(v) {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
+  // 서버가 플레이오토 현재 재고와 비교해 판정을 바꿨으면 알려 준다.
+  function toastLive(res, asked) {
+    const live = res && res.live;
+    const item = res && res.item;
+    if (!live || !item) return;
+    if (live.stock === null || live.stock === undefined) {
+      UI.toast(`플레이오토 재고를 읽지 못해 총 재고 기준으로 기록했습니다${live.message ? ` (${live.message})` : ''}`, 'info');
+      return;
+    }
+    const n = UI.num(live.stock);
+    if (asked === 'match' && item.status === 'mismatch') {
+      UI.toast(`플레이오토 재고 ${n}개와 달라 불일치로 기록했습니다 · 실사반영으로 넘어갑니다`, 'info');
+    } else if (asked === 'mismatch' && item.status === 'match') {
+      UI.toast(`플레이오토 재고 ${n}개와 같아 일치로 기록했습니다`, 'ok');
+    }
+  }
+
   function totalStock(r) {
     const db = numOrNull(r.db_stock);
     const live = numOrNull(r.stock_today);
@@ -219,6 +242,9 @@
     if (r.status !== 'pending' && liveNow !== null && total !== null && liveNow !== total) {
       parts.push(`<span class="sc-side-sub">현재 ${esc(UI.num(liveNow))}</span>`);
     }
+    // 진열보충 요청 · 일치/불일치 기록 때 조회한 플레이오토 재고(판정은 이 값과 비교한다)
+    const pa = numOrNull(r.live_stock);
+    if (pa !== null) parts.push(`<span class="sc-side-sub sc-live">플레이오토 ${esc(UI.num(pa))}${r.live_stock_at ? ` · ${esc(hhmm(r.live_stock_at))}` : ''}</span>`);
     if (r.status === 'match' || r.status === 'mismatch') {
       parts.push(UI.chip(r.status === 'match' ? '일치' : '불일치', r.status === 'match' ? 'ok' : 'danger'));
       if (r.status === 'mismatch' && r.resolved) parts.push(UI.chip('처리완료', 'ok'));
@@ -522,7 +548,7 @@
     const res = await UI.busy(btn, () => UI.api.post(path, body));
     if (res === undefined) return false;
     applyItem(res && res.item);
-    return true;
+    return res || true;
   }
 
   // 일치로 확인한 재고가 기준 미만이면 품절처리에 자동으로 올린다.
@@ -688,7 +714,11 @@
         Shell.show('items', { code: r.item_code });
         return;
       case 'match':
-        if (await write(btn, '/stock_checks/record', { id: r.id, result: 'match' })) await autoSoldout(id);
+      {
+        // 일치 = 화면에 보이는 총 재고만큼 있었다는 뜻. 서버가 플레이오토 현재 재고와 다시 비교한다.
+        const res = await write(btn, '/stock_checks/record', { id: r.id, result: 'match', counted_qty: totalStock(r) });
+        if (res) { toastLive(res, 'match'); await autoSoldout(id); }
+      }
         return;
       case 'open-mismatch': openForm(id, 'mismatch'); return;
       case 'open-resolve': openForm(id, 'resolve'); return;
@@ -744,9 +774,10 @@
         input.focus();
         return;
       }
-      await write(submitBtn, '/stock_checks/record', {
+      const res = await write(submitBtn, '/stock_checks/record', {
         id: r.id, result: 'mismatch', counted_qty: qty, reason: String(form.elements.reason.value).trim(),
       });
+      if (res) { toastLive(res, 'mismatch'); await autoSoldout(r.id); }
       return;
     }
     await write(submitBtn, '/stock_checks/resolve', {

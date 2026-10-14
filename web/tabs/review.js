@@ -80,6 +80,7 @@
     seq: 0,
     sticky: new Set(),     // 방금 판단한 줄: 목록 조건에서 벗어나도 제자리에 둔다
     memos: new Map(),      // String(id) -> 입력 중인 메모
+    usage: null,           // 오늘 플레이오토 호출 수 { calls, daily_limit }
   };
 
   const esc = v => UI.esc(v);
@@ -132,8 +133,12 @@
     const diffCls = d === null || d === 0 ? 'rv-diff--zero' : d < 0 ? 'rv-diff--minus' : 'rv-diff--plus';
     const diffText = d === null ? '-' : `${d > 0 ? '+' : ''}${UI.num(d)}`;
     const atCheck = numOrNull(r.db_stock);
-    const sub = atCheck !== null && db !== null && atCheck !== db
-      ? `<div class="rv-sub">불일치를 기록할 때의 DB재고는 ${esc(UI.num(atCheck))}개였습니다.</div>` : '';
+    const pa = numOrNull(r.live_stock);
+    // 재고실사 때 조회한 플레이오토 재고가 있으면 그것이 비교 기준이고, 반영할 때 그 뒤에 팔린 만큼 빼서 보낸다.
+    const sub = pa !== null
+      ? `<div class="rv-sub">재고실사 때 플레이오토 재고 <b>${esc(UI.num(pa))}</b>개${r.live_stock_at ? ` (${esc(UI.fmtDateTime(r.live_stock_at))})` : ''} · 반영하면 그 뒤 팔린 수량만큼 빼서 보냅니다.</div>`
+      : atCheck !== null && db !== null && atCheck !== db
+        ? `<div class="rv-sub">불일치를 기록할 때의 DB재고는 ${esc(UI.num(atCheck))}개였습니다.</div>` : '';
     const done = r.review_status === 'applied';
     const apply = r.review_status === 'rejected' || db === null || counted === null ? ''
       : `<div class="rv-apply${done ? ' rv-apply--done' : ''}">DB재고 <b>${esc(UI.num(done ? (atCheck ?? db) : db))}</b> &gt;&gt; 실재고 <b>${esc(UI.num(counted))}</b> ${done ? '반영했습니다.' : '반영한다.'}</div>`;
@@ -206,7 +211,17 @@
 
   function summaryHtml() {
     const c = bucketCounts();
-    return `총 <b>${esc(UI.num(c.all))}</b>건 · 대기 <b>${esc(UI.num(c.wait))}</b> · 보류 <b>${esc(UI.num(c.held))}</b> · 반영 <b>${esc(UI.num(c.done))}</b> · 미반영 <b>${esc(UI.num(c.rejected))}</b>`;
+    const u = state.usage;
+    const usage = u ? `<br><small>오늘 플레이오토 사용 ${esc(UI.num(u.calls))}회 / 하루 ${esc(UI.num(u.daily_limit))}회 (오전 9시 초기화)</small>` : '';
+    return `총 <b>${esc(UI.num(c.all))}</b>건 · 대기 <b>${esc(UI.num(c.wait))}</b> · 보류 <b>${esc(UI.num(c.held))}</b> · 반영 <b>${esc(UI.num(c.done))}</b> · 미반영 <b>${esc(UI.num(c.rejected))}</b>${usage}`;
+  }
+
+  // 오늘 플레이오토 호출 수(실패해도 화면에는 영향 없음)
+  async function loadUsage() {
+    try {
+      state.usage = await UI.api.get('/playauto_usage');
+      syncToolbar();
+    } catch (_) { /* 표시만 빠진다 */ }
   }
 
   function stateHtml(text, sub, btnAct, btnLabel) {
@@ -295,6 +310,7 @@
     }
     renderBody();
     syncToolbar();
+    loadUsage();
   }
 
   function confirmText(r, decision) {
@@ -302,7 +318,10 @@
     const counted = numOrNull(r.counted_qty);
     const head = `${r.item_name || r.item_code}\n총 재고 ${UI.num(db)} → 실재고 ${UI.num(counted)}`;
     if (decision === 'applied') {
-      return `${head}\n\n플레이오토 실재고를 ${UI.num(counted)}개로 바꿉니다. 반영할까요?`;
+      const pa = numOrNull(r.live_stock);
+      return pa !== null
+        ? `${head}\n\n플레이오토 실재고를 ${UI.num(counted)}개로 바꿉니다.\n재고실사 뒤에 팔리거나 들어온 수량은 보낼 때 자동으로 맞춥니다. 반영할까요?`
+        : `${head}\n\n플레이오토 실재고를 ${UI.num(counted)}개로 바꿉니다. 반영할까요?`;
     }
     if (decision === 'rejected') return `${head}\n\n반영하지 않고 닫을까요?`;
     return '';
