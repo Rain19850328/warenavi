@@ -88,6 +88,8 @@
         return `${label}: ${val(c.old)} → ${val(c.new)}`;
       }).join(' · ')];
     },
+    soldout_decide: d => ['품절관리', d.decision ? 'info' : 'muted', 'soldout',
+      d.decision ? `판단: ${d.decision}` : `판단 취소${d.was ? ` (${d.was})` : ''}`],
     stock_status_change: d => {
       const viaSoldout = d.via === 'soldout';
       return ['재고상태', 'warn', viaSoldout ? 'soldout' : 'item',

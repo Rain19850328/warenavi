@@ -1,5 +1,5 @@
 // tabs/review.js — 확인요청 탭(관리자 전용)
-// 재고확인에서 불일치로 기록된 건을 모아 보여 주고, 관리자가 반영 / 보류 / 미반영을 판단한다.
+// 재고확인에서 불일치로 기록된 건을 날짜별로 보여 주고, 관리자가 반영 / 보류 / 미반영을 판단한다(품절관리 탭과 같은 배치).
 // 반영하면 서버가 실재고를 플레이오토로 보낸다. 못 보낸 건은 '전송 대기 / 실패'로 남아 다시 보낼 수 있다.
 (function () {
   'use strict';
@@ -8,39 +8,53 @@
   const CSS = `
 .tab-review .rv-toolbar .seg{ flex: 1 1 100%; }
 .tab-review .rv-cnt{ margin-left: 3px; font-weight: 500; opacity: .75; }
-.tab-review .rv-summary{ margin: 0 0 8px; font-size: 12px; color: #64748b; }
-.tab-review .rv-row{ border-left: 4px solid #ef4444; }
-.tab-review .rv-row--held{ border-left-color: #f59e0b; }
-.tab-review .rv-row--applied{ border-left-color: #22c55e; }
-.tab-review .rv-row--rejected{ border-left-color: #94a3b8; }
+.tab-review .rv-summary{ margin: 0 0 10px; padding: 8px 10px; border-radius: 10px; background: #f1f5f9; font-size: 13px; line-height: 1.6; color: #334155; }
+.tab-review .seg > button{ min-height: 40px; padding: 0 4px; }
+.tab-review .wl-row.is-done{ opacity: 1; }
+.tab-review .wl-row.is-done .wl-main{ opacity: .55; }
+.tab-review .wl-actions{ padding-top: 8px; border-top: 1px dashed #e2e8f0; }
+.tab-review .wl-actions:empty{ display: none; }
+.tab-review .rv-top{ display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tab-review .rv-loc{ margin-right: 2px; font-size: 16px; font-weight: 800; color: #0f172a; }
 .tab-review .rv-name{
-  appearance: none; display: block; width: 100%; padding: 0;
+  appearance: none; display: block; width: 100%; margin-top: 6px; padding: 0;
   border: 0; background: none; cursor: pointer; text-align: left; font-family: inherit;
 }
-.tab-review .rv-loc{ font-size: 14px; font-weight: 700; color: #0f172a; }
-.tab-review .rv-qty{ display: flex; align-items: flex-end; gap: 10px; }
-.tab-review .rv-qty__box{ display: flex; flex-direction: column; align-items: flex-end; min-width: 52px; line-height: 1.1; }
-.tab-review .rv-qty__label{ font-size: 12px; font-weight: 600; color: #64748b; }
-.tab-review .rv-qty__num{ font-size: 26px; font-weight: 800; color: #0f172a; }
-.tab-review .rv-qty__num--old{ color: #64748b; }
-.tab-review .rv-qty__arrow{ padding-bottom: 4px; font-size: 18px; color: #94a3b8; }
-.tab-review .rv-diff{ font-size: 13px; font-weight: 700; }
+.tab-review .rv-top .rv-state-chip{ margin-left: auto; }
+.tab-review .rv-compare{
+  display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 6px;
+  margin-top: 10px; padding: 10px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc;
+}
+.tab-review .rv-compare__box{ display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; line-height: 1.1; }
+.tab-review .rv-compare__label{ font-size: 12px; font-weight: 700; color: #64748b; }
+.tab-review .rv-compare__num{ font-size: 30px; font-weight: 800; color: #0f172a; }
+.tab-review .rv-compare__num--db{ color: #64748b; }
+.tab-review .rv-compare__sign{ font-size: 18px; font-weight: 700; color: #94a3b8; }
+.tab-review .rv-compare__num.rv-diff--zero{ color: #94a3b8; }
+
 .tab-review .rv-diff--minus{ color: #b91c1c; }
 .tab-review .rv-diff--plus{ color: #1d4ed8; }
-.tab-review .rv-sub{ font-size: 11px; color: #64748b; }
+.tab-review .rv-sub{ margin-top: 4px; font-size: 12px; color: #64748b; }
 .tab-review .rv-note{
   margin-top: 6px; padding: 6px 8px; border-radius: 8px;
   background: #f1f5f9; font-size: 13px; line-height: 1.4; color: #334155; word-break: break-word;
 }
 .tab-review .rv-note--reason{ background: #fef2f2; color: #991b1b; }
-.tab-review .rv-memo{ flex: 1 0 100%; }
+.tab-review .rv-apply{
+  margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid #bae6fd;
+  background: #f0f9ff; font-size: 14px; font-weight: 600; line-height: 1.4; color: #075985;
+}
+.tab-review .rv-apply b{ font-size: 16px; font-weight: 800; color: #0f172a; }
+.tab-review .rv-apply--done{ border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+.tab-review .rv-memo{ flex: 1 0 100%; min-width: 0; }
+.tab-review .rv-memo input{ width: 100%; box-sizing: border-box; }
 .tab-review .wl-actions .rv-act{ flex: 1 1 88px; min-height: 44px; font-size: 15px; }
 .tab-review .rv-state{ display: grid; justify-items: center; gap: 4px; padding-bottom: 20px; }
 @media (min-width: 640px){
   .tab-review .rv-toolbar .seg{ flex: 0 1 auto; }
 }`;
 
-  const SCOPES = [['open', '판단 대기'], ['done', '판단 완료']];
+  const FILTERS = [['all', '전체'], ['wait', '대기'], ['held', '보류'], ['done', '반영'], ['rejected', '미반영']];
   const DECISIONS = {
     applied: { label: '반영', tone: 'ok' },
     held: { label: '보류', tone: 'warn' },
@@ -55,10 +69,12 @@
   const state = {
     root: null,
     bodyEl: null,
-    scope: 'open',
+    dateBar: null,
+    date: '',              // '' = 날짜 전체(기본), 'YYYY-MM-DD' = 그 날짜만
+    filter: 'all',
     items: [],
     index: new Map(),      // String(id) -> row
-    loadedScope: null,     // 지금 items가 어느 조회의 결과인지
+    loadedDate: null,      // 지금 items가 어느 날짜의 결과인지
     phase: 'idle',         // loading | error | ready
     errorMsg: '',
     seq: 0,
@@ -68,6 +84,7 @@
 
   const esc = v => UI.esc(v);
 
+  function isYmd(v) { return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v); }
   function numOrNull(v) {
     if (v === null || v === undefined || v === '') return null;
     const n = Number(v);
@@ -82,26 +99,53 @@
     return numOrNull(r.stock_today) ?? numOrNull(r.db_stock);
   }
   function isDecided(r) { return r.review_status === 'applied' || r.review_status === 'rejected'; }
+  // 재고확인 탭과 같은 순서: 로케이션 코드 영어(A~Z) → 한글(가나다), 숫자는 크기순, 위치 미지정은 맨 뒤.
+  function sortRows(rows) {
+    const cmp = (x, y) => String(x ?? '').localeCompare(String(y ?? ''), 'en', { numeric: true });
+    const none = r => (locText(r.location_code) === '위치 미지정' ? 1 : 0);
+    return rows.slice().sort((x, y) =>
+      none(x) - none(y) || cmp(x.location_code, y.location_code) || cmp(x.item_code, y.item_code)
+      || cmp(x.check_date, y.check_date));
+  }
+  // 줄이 어느 탭에 속하는지: 대기(wait) | 보류(held) | 반영(done) | 미반영(rejected)
+  function bucketOf(r) {
+    if (r.review_status === 'applied') return 'done';
+    if (r.review_status === 'rejected') return 'rejected';
+    return r.review_status === 'held' ? 'held' : 'wait';
+  }
+  function bucketCounts() {
+    const c = { all: state.items.length, wait: 0, held: 0, done: 0, rejected: 0 };
+    for (const r of state.items) c[bucketOf(r)]++;
+    return c;
+  }
+  function isVisible(r) {
+    if (state.filter === 'all' || state.sticky.has(String(r.id))) return true;
+    return bucketOf(r) === state.filter;
+  }
 
   /* ---------- rendering ---------- */
-  function sideHtml(r) {
+  // 이 탭의 중심: DB재고와 실제로 센 실재고, 그 차이. 반영하면 DB재고를 실재고 값으로 맞춘다.
+  function compareHtml(r) {
     const db = dbStock(r);
     const counted = numOrNull(r.counted_qty);
-    const parts = [`
-      <div class="rv-qty">
-        <div class="rv-qty__box"><span class="rv-qty__label">DB 재고</span><span class="rv-qty__num rv-qty__num--old">${esc(UI.num(db))}</span></div>
-        <span class="rv-qty__arrow" aria-hidden="true">→</span>
-        <div class="rv-qty__box"><span class="rv-qty__label">실재고</span><span class="rv-qty__num">${esc(UI.num(counted))}</span></div>
-      </div>`];
-    if (db !== null && counted !== null && counted !== db) {
-      const d = counted - db;
-      parts.push(`<span class="rv-diff ${d < 0 ? 'rv-diff--minus' : 'rv-diff--plus'}">${d > 0 ? '+' : ''}${esc(UI.num(d))}</span>`);
-    }
+    const d = db !== null && counted !== null ? counted - db : null;
+    const diffCls = d === null || d === 0 ? 'rv-diff--zero' : d < 0 ? 'rv-diff--minus' : 'rv-diff--plus';
+    const diffText = d === null ? '-' : `${d > 0 ? '+' : ''}${UI.num(d)}`;
     const atCheck = numOrNull(r.db_stock);
-    if (atCheck !== null && db !== null && atCheck !== db) {
-      parts.push(`<span class="rv-sub">확인 당시 DB ${esc(UI.num(atCheck))}</span>`);
-    }
-    return parts.join('');
+    const sub = atCheck !== null && db !== null && atCheck !== db
+      ? `<div class="rv-sub">불일치를 기록할 때의 DB재고는 ${esc(UI.num(atCheck))}개였습니다.</div>` : '';
+    const done = r.review_status === 'applied';
+    const apply = r.review_status === 'rejected' || db === null || counted === null ? ''
+      : `<div class="rv-apply${done ? ' rv-apply--done' : ''}">DB재고 <b>${esc(UI.num(done ? (atCheck ?? db) : db))}</b> &gt;&gt; 실재고 <b>${esc(UI.num(counted))}</b> ${done ? '반영했습니다.' : '반영한다.'}</div>`;
+    return `
+          <div class="rv-compare">
+            <div class="rv-compare__box"><span class="rv-compare__label">DB재고</span><span class="rv-compare__num rv-compare__num--db">${esc(UI.num(db))}</span></div>
+            <span class="rv-compare__sign" aria-hidden="true">→</span>
+            <div class="rv-compare__box"><span class="rv-compare__label">실재고</span><span class="rv-compare__num">${esc(UI.num(counted))}</span></div>
+            <span class="rv-compare__sign" aria-hidden="true">=</span>
+            <div class="rv-compare__box"><span class="rv-compare__label">차이</span><span class="rv-compare__num ${diffCls}">${esc(diffText)}</span></div>
+          </div>
+          ${sub}${apply}`;
   }
 
   function actionsHtml(r) {
@@ -126,16 +170,13 @@
   function rowHtml(r) {
     const id = String(r.id);
     const decision = DECISIONS[r.review_status];
-    const cls = ['wl-row', 'rv-row'];
-    if (decision) cls.push(`rv-row--${r.review_status}`);
+    const cls = ['wl-row'];
     if (isDecided(r)) cls.push('is-done');
 
     const chips = [];
-    if (r.check_date) chips.push(UI.chip(r.check_date, 'muted'));
-    if (decision) chips.push(UI.chip(decision.label, decision.tone));
     const pa = PLAYAUTO[r.playauto_status];
     if (pa) chips.push(UI.chip(pa[0], pa[1]));
-    if (r.stock_status) chips.push(UI.chip(r.stock_status, 'muted'));
+    const stateChip = `<span class="rv-state-chip">${decision ? UI.chip(decision.label, decision.tone) : UI.chip('대기', 'warn')}</span>`;
 
     const notes = [];
     if (r.mismatch_reason) notes.push(`<div class="rv-note rv-note--reason">사유: ${esc(r.mismatch_reason)}</div>`);
@@ -153,16 +194,19 @@
     return `
       <li class="${cls.join(' ')}" data-id="${esc(id)}">
         <div class="wl-main">
+          <div class="rv-top"><span class="rv-loc">${esc(locText(r.location_code))}</span>${chips.join('')}${stateChip}</div>
           <button type="button" class="wl-name rv-name" data-act="open-item" title="상품조회에서 보기">${esc(r.item_name || r.item_code)}</button>
-          <div class="wl-code">${esc(r.item_code)}</div>
-          <div class="wl-meta"><span class="rv-loc">${esc(locText(r.location_code))}</span></div>
-          <div class="wl-meta">${chips.join('')}</div>
+          ${compareHtml(r)}
           ${notes.join('')}
           ${checked ? `<div class="wl-meta">불일치 기록: ${esc(checked)}</div>` : ''}
         </div>
-        <div class="wl-side">${sideHtml(r)}</div>
         <div class="wl-actions">${actionsHtml(r)}</div>
       </li>`;
+  }
+
+  function summaryHtml() {
+    const c = bucketCounts();
+    return `총 <b>${esc(UI.num(c.all))}</b>건 · 대기 <b>${esc(UI.num(c.wait))}</b> · 보류 <b>${esc(UI.num(c.held))}</b> · 반영 <b>${esc(UI.num(c.done))}</b> · 미반영 <b>${esc(UI.num(c.rejected))}</b>`;
   }
 
   function stateHtml(text, sub, btnAct, btnLabel) {
@@ -176,29 +220,31 @@
     if (state.phase === 'error') { body.innerHTML = stateHtml('불러오지 못했습니다', state.errorMsg, 'retry', '다시 시도'); return; }
     if (state.phase !== 'ready') { body.innerHTML = ''; return; }
     if (!state.items.length) {
-      body.innerHTML = stateHtml(state.scope === 'open'
-        ? '판단을 기다리는 불일치 건이 없습니다.'
-        : '판단을 마친 건이 없습니다.');
+      body.innerHTML = stateHtml(state.date ? `${state.date} 에는 불일치로 기록된 건이 없습니다.` : '불일치로 기록된 건이 없습니다.');
       return;
     }
-    const held = state.items.filter(r => r.review_status === 'held').length;
-    const summary = state.scope === 'open'
-      ? `대기 ${UI.num(state.items.length)}건${held ? ` (보류 ${UI.num(held)}건 포함)` : ''}`
-      : `최근 ${UI.num(state.items.length)}건`;
+    const summary = summaryHtml();
+    const rows = sortRows(state.items.filter(isVisible));
     body.innerHTML =
-      `<p class="rv-summary">${esc(summary)}</p>` +
-      `<ul class="wl-list">${state.items.map(rowHtml).join('')}</ul>`;
+      `<p class="rv-summary">${summary}</p>` +
+      (rows.length
+        ? `<ul class="wl-list">${rows.map(rowHtml).join('')}</ul>`
+        : '<p class="empty">해당하는 건이 없습니다.</p>');
   }
 
   function syncToolbar() {
-    state.root.querySelectorAll('[data-act="scope"]').forEach(b => {
-      const on = b.dataset.val === state.scope;
+    state.root.querySelectorAll('[data-act="filter"]').forEach(b => {
+      const on = b.dataset.val === state.filter;
       b.classList.toggle('is-active', on);
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
-    const cnt = state.root.querySelector('[data-cnt="open"]');
-    const counts = Shell.counts();
-    if (cnt) cnt.textContent = counts && Number(counts.review_open) > 0 ? String(Number(counts.review_open)) : '';
+    const counts = bucketCounts();
+    // 한 줄만 다시 그린 뒤에도(판단 직후) 요약 줄이 맞도록 함께 고친다.
+    const summaryEl = state.bodyEl && state.bodyEl.querySelector('.rv-summary');
+    if (summaryEl) summaryEl.innerHTML = summaryHtml();
+    state.root.querySelectorAll('[data-cnt]').forEach(el => {
+      el.textContent = state.phase === 'ready' ? String(counts[el.dataset.cnt] ?? 0) : '';
+    });
   }
 
   function rowEl(id) {
@@ -221,33 +267,29 @@
   /* ---------- data ---------- */
   // keep: 다른 곳에서 바뀐 내용을 반영할 때. 방금 판단해 화면에 남겨 둔 줄(sticky)을 지우지 않는다.
   async function load({ keep = false } = {}) {
-    const scope = state.scope;
+    const date = state.date;
     const seq = ++state.seq;
     if (!keep) state.sticky.clear();
-    // 같은 목록을 다시 불러올 때는 화면을 비우지 않는다(스크롤 유지)
-    if (!(state.phase === 'ready' && state.loadedScope === scope)) {
+    // 같은 날짜를 다시 불러올 때는 화면을 비우지 않는다(스크롤 유지)
+    if (!(state.phase === 'ready' && state.loadedDate === date)) {
       state.phase = 'loading';
       state.items = [];
       state.index = new Map();
-      state.loadedScope = null;
+      state.loadedDate = null;
       renderBody();
     }
     try {
-      const res = await UI.api.get('/stock_reviews', { scope });
+      const res = await UI.api.get('/stock_reviews', date ? { date } : { all: 1 });
       if (seq !== state.seq) return;
-      const fresh = Array.isArray(res && res.items) ? res.items : [];
-      const freshIds = new Set(fresh.map(r => String(r.id)));
-      // 방금 판단한 줄은 목록 조건에서 빠졌더라도 제자리에 남긴다.
-      const kept = keep ? state.items.filter(r => state.sticky.has(String(r.id)) && !freshIds.has(String(r.id))) : [];
-      state.items = fresh.concat(kept);
+      state.items = Array.isArray(res && res.items) ? res.items : [];
       state.index = new Map(state.items.map(r => [String(r.id), r]));
-      state.loadedScope = scope;
+      state.loadedDate = date;
       state.phase = 'ready';
     } catch (err) {
       if (seq !== state.seq) return;
       state.items = [];
       state.index = new Map();
-      state.loadedScope = null;
+      state.loadedDate = null;
       state.phase = 'error';
       state.errorMsg = (err && err.message) || '';
     }
@@ -258,7 +300,7 @@
   function confirmText(r, decision) {
     const db = dbStock(r);
     const counted = numOrNull(r.counted_qty);
-    const head = `${r.item_name || r.item_code}\nDB 재고 ${UI.num(db)} → 실재고 ${UI.num(counted)}`;
+    const head = `${r.item_name || r.item_code}\n총 재고 ${UI.num(db)} → 실재고 ${UI.num(counted)}`;
     if (decision === 'applied') {
       return `${head}\n\n플레이오토 실재고를 ${UI.num(counted)}개로 바꿉니다. 반영할까요?`;
     }
@@ -296,6 +338,7 @@
     state.index.set(id, item);
     state.sticky.add(id);
     replaceRow(id);
+    syncToolbar();
     return item;
   }
 
@@ -320,12 +363,12 @@
     if (!btn || !state.root.contains(btn)) return;
     const act = btn.dataset.act;
 
-    if (act === 'scope') {
-      if (state.scope === btn.dataset.val) return;
-      state.scope = btn.dataset.val;
-      state.memos.clear();
+    if (act === 'filter') {
+      if (state.filter === btn.dataset.val) return;
+      state.filter = btn.dataset.val;
+      state.sticky.clear();
       syncToolbar();
-      load();
+      renderBody();
       return;
     }
     if (act === 'retry' || act === 'reload') { load(); return; }
@@ -356,23 +399,36 @@
     state.root = root;
     root.classList.add('tab-review');
     root.innerHTML = `
-      <div class="view-head"><h2>확인요청</h2></div>
+      <div class="view-head"><h2>확인요청</h2><div class="rv-datebar"></div></div>
       <div class="view-toolbar rv-toolbar">
         <div class="seg" role="group" aria-label="목록 구분">
-          ${SCOPES.map(([val, label]) =>
-            `<button type="button" data-act="scope" data-val="${val}">${label}${val === 'open' ? '<span class="rv-cnt" data-cnt="open"></span>' : ''}</button>`).join('')}
+          ${FILTERS.map(([val, label]) =>
+            `<button type="button" data-act="filter" data-val="${val}">${label}<span class="rv-cnt" data-cnt="${val}"></span></button>`).join('')}
         </div>
-        <button type="button" class="btn-sm" data-act="reload">새로고침</button>
       </div>
       <div class="view-body"></div>`;
     state.bodyEl = root.querySelector('.view-body');
+    state.dateBar = UI.dateBar(root.querySelector('.rv-datebar'), {
+      value: state.date,
+      allowAll: true,
+      onChange: ymd => {
+        state.date = ymd;
+        state.memos.clear();
+        load();
+      },
+    });
     root.addEventListener('click', onClick);
     root.addEventListener('input', onInput);
-    window.addEventListener('shell:counts', () => { if (state.root) syncToolbar(); });
     syncToolbar();
   }
 
-  function onShow() {
+  function onShow(params) {
+    // 날짜를 지정해서 들어온 경우에만 그 날짜로 바꾼다. 그 밖에는 보던 범위(기본: 전체)를 유지한다.
+    if (params && isYmd(params.date) && params.date !== state.date) {
+      state.date = params.date;
+      state.dateBar.set(params.date);
+      state.memos.clear();
+    }
     syncToolbar();
     load();
   }

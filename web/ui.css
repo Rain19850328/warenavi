@@ -184,6 +184,8 @@ dialog .field input[type="number"]{
 .date-bar{ display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
 .date-bar .date-bar__today{ min-height: 34px; padding: 0 10px; }
 .date-bar .date-bar__today[hidden]{ display: none; }
+.date-bar .date-bar__all{ min-height: 34px; padding: 0 12px; }
+.date-bar .date-bar__all.is-active{ background: #0ea5e9; border-color: #0ea5e9; color: #fff; }
 .date-bar .date-bar__input,
 .view-head input[type="date"]{
   flex: 0 0 auto; width: 136px; min-width: 0;

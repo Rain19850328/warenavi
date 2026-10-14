@@ -1,5 +1,6 @@
 // tabs/display.js — 진열보충 탭
 // 스토리지렉에서 꺼내 진열 위치를 채워 달라는 요청 목록.
+// 렉 앞에 한 번 서서 그 위치의 상품을 모두 꺼낼 수 있도록, 가져올 곳(스토리지렉 위치)별로 묶어 보여 준다.
 // 가져올 곳과 수량을 고르고 완료하면 그 위치 재고가 차감된다. 되돌리면 같은 위치에 다시 채운다.
 (function () {
   'use strict';
@@ -9,31 +10,38 @@
 .tab-display .dp-toolbar .seg{ flex: 1 1 100%; }
 .tab-display .dp-cnt{ margin-left: 4px; font-weight: 500; opacity: .75; }
 .tab-display .dp-summary{ margin: 0 0 8px; font-size: 12px; color: #64748b; }
-.tab-display .dp-code{
-  appearance: none; display: inline-block; min-height: 28px; padding: 4px 0;
-  border: 0; background: none; cursor: pointer; text-align: left;
-  font: inherit; font-size: 13px; font-weight: 700; color: #0369a1; text-decoration: underline;
+.tab-display .dp-top{ display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tab-display .dp-name{
+  appearance: none; display: block; width: 100%; margin-top: 6px; padding: 0;
+  border: 0; background: none; cursor: pointer; text-align: left; font-family: inherit;
 }
-.tab-display .dp-loc{ font-size: 14px; font-weight: 700; color: #0f172a; }
-.tab-display .dp-racks{
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-  margin-top: 8px; padding: 8px; border-radius: 10px;
-  background: #f8fafc; border: 1px solid #e2e8f0;
+.tab-display .dp-stock{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-top: 8px; font-size: 13px; color: #64748b; }
+.tab-display .dp-stock__title{ font-weight: 700; color: #334155; }
+.tab-display .dp-stock b{ margin-left: 4px; font-size: 16px; color: #0f172a; }
+.tab-display .dp-total{ display: flex; flex-direction: column; align-items: flex-end; min-width: 64px; line-height: 1.1; }
+.tab-display .dp-total__label{ font-size: 12px; font-weight: 600; color: #64748b; }
+.tab-display .dp-total__num{ font-size: 30px; font-weight: 800; color: #0f172a; }
+.tab-display .dp-total__num.is-zero{ color: #b91c1c; }
+.tab-display .dp-group{
+  display: flex; align-items: baseline; gap: 8px; margin: 18px 0 6px; padding: 4px 0 4px 10px;
+  border-left: 5px solid #0f172a; color: #0f172a; font-size: 18px; font-weight: 800; letter-spacing: .3px;
 }
-.tab-display .dp-racks--empty{ background: #fffbeb; border-color: #fde68a; }
-.tab-display .dp-racks__label{ font-size: 12px; font-weight: 600; color: #475569; }
-.tab-display .dp-racks .chip{ padding: 4px 10px; font-size: 14px; }
+.tab-display .dp-summary + .dp-group{ margin-top: 0; }
+.tab-display .dp-group span{ font-size: 12px; font-weight: 600; color: #64748b; }
+.tab-display .dp-group--plain{ border-left-color: #cbd5e1; color: #64748b; font-size: 15px; }
+.tab-display .dp-loc{ margin-right: 2px; font-size: 16px; font-weight: 800; color: #0f172a; }
+.tab-display .dp-racks{ display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .tab-display .dp-rack{
-  appearance: none; min-height: 40px; padding: 0 12px; border-radius: 10px;
-  border: 1px solid #e2e8f0; background: #f8fafc; color: #0f172a; cursor: pointer;
-  box-shadow: 0 1px 1px rgba(0,0,0,.06);
-  font: inherit; font-size: 14px; font-weight: 600;
+  appearance: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px;
+  border: 1px solid #bae6fd; border-radius: 10px; background: #e0f2fe; color: #075985;
+  font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
 }
-.tab-display .dp-rack b{ margin-left: 4px; color: #0369a1; }
+.tab-display .dp-rack b{ font-size: 14px; color: #0369a1; }
 .tab-display .dp-rack.is-active{ background: #0ea5e9; border-color: #0284c7; color: #fff; }
 .tab-display .dp-rack.is-active b{ color: #fff; }
 .tab-display .dp-take{
-  flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-top: 8px; padding: 10px 12px; border: 1px solid #bae6fd; border-radius: 12px; background: #f0f9ff;
   font-size: 13px; font-weight: 600; color: #334155;
 }
 .tab-display .dp-take label{ display: inline-flex; align-items: center; gap: 8px; min-height: 40px; }
@@ -44,7 +52,6 @@
 }
 .tab-display .dp-take input[type="text"]:focus{ outline: none; border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56,189,248,.25); }
 .tab-display .dp-take .btn-sm{ min-height: 40px; }
-.tab-display .dp-hint{ flex: 1 0 100%; font-size: 12px; font-weight: 500; color: #64748b; }
 .tab-display .dp-taken{
   margin-top: 6px; padding: 6px 8px; border-radius: 8px;
   background: #ecfdf5; border: 1px solid #a7f3d0; font-size: 13px; font-weight: 600; color: #065f46;
@@ -80,6 +87,7 @@
     filter: 'all',
     sticky: new Set(),        // 방금 처리한 행: 필터에 안 맞아도 제자리에 둔다
     pick: new Map(),          // String(id) -> {rack, qty(입력 중인 글자)} : 고른 가져올 곳
+    groupKey: new Map(),      // String(id) -> 묶음 키(가져올 렉 코드). 방금 완료한 줄이 다른 묶음으로 튀지 않게 기억해 둔다
   };
 
   const esc = v => UI.esc(v);
@@ -129,13 +137,40 @@
     return 'muted';
   }
 
+  // 영어(A~Z) 다음에 한글(가나다) 순(재고확인 탭과 같은 규칙).
+  const cmp = (a, b) => String(a ?? '').localeCompare(String(b ?? ''), 'en', { numeric: true });
+  const GROUP_NONE = '(none)';   // 스토리지렉 재고 없음: 렉 묶음들 뒤
+  const GROUP_DONE = '(done)';   // 완료: 맨 뒤
+  const groupRank = key => (key === GROUP_DONE ? 2 : key === GROUP_NONE ? 1 : 0);
+
+  // 가져올 곳이 여러 군데면 렉 코드가 가장 앞선 곳의 묶음에 넣는다.
+  function rackKeyOf(r) {
+    const codes = rackList(r).map(x => String(x.rack_code)).sort(cmp);
+    return codes.length ? codes[0] : GROUP_NONE;
+  }
+  // 방금 처리한 행은 원래 묶음에 그대로 둔다(완료하면 렉 재고가 줄어 묶음이 바뀔 수 있으므로 기억해 둔 키를 쓴다).
+  function groupOf(r) {
+    const id = String(r.id);
+    if (state.sticky.has(id)) return state.groupKey.get(id) || rackKeyOf(r);
+    return r.status === 'done' ? GROUP_DONE : rackKeyOf(r);
+  }
+  function rememberGroups() {
+    for (const r of state.items) {
+      const id = String(r.id);
+      if (!state.sticky.has(id) || !state.groupKey.has(id)) state.groupKey.set(id, r.status === 'done' ? GROUP_DONE : rackKeyOf(r));
+    }
+  }
+  function groupLabel(key) {
+    if (key === GROUP_DONE) return '완료';
+    if (key === GROUP_NONE) return '스토리지렉 재고 없음';
+    return key;
+  }
+
   function sortRows(rows) {
-    const cmp = (a, b) => String(a ?? '').localeCompare(String(b ?? ''), 'ko', { numeric: true });
     return rows.slice().sort((a, b) => {
-      // 방금 처리한 행은 원래 자리(미완료 묶음)에 그대로 둔다
-      const da = a.status === 'done' && !state.sticky.has(String(a.id)) ? 1 : 0;
-      const db = b.status === 'done' && !state.sticky.has(String(b.id)) ? 1 : 0;
-      if (da !== db) return da - db;
+      const ga = groupOf(a);
+      const gb = groupOf(b);
+      if (ga !== gb) return groupRank(ga) - groupRank(gb) || cmp(ga, gb);
       return cmp(a.location_code, b.location_code) || cmp(a.item_code, b.item_code);
     });
   }
@@ -179,12 +214,23 @@
     }
     if (r.stock_status) chips.push(UI.chip(r.stock_status, statusTone(r.stock_status)));
 
+    // 재고확인 탭과 같은 재고정보 표기: SR1은 수량(없으면 '없음'), SR2는 있음/없음.
+    const rowQty = row => rackList(r)
+      .filter(x => String(x.rack_code).toUpperCase().startsWith(`${row}-`))
+      .reduce((sum, x) => sum + (Number(x.qty) || 0), 0);
+    const sr1 = rowQty('SR1');
+    const sr3 = rowQty('SR3');
+    const stockInfo = `<div class="dp-stock"><span class="dp-stock__title">재고정보</span>
+            <span>SR1:<b>${sr1 > 0 ? esc(UI.num(sr1)) : '없음'}</b></span>
+            <span>SR2:<b>${rackList(r).some(x => UI.isPresenceRack(x.rack_code)) ? '있음' : '없음'}</b></span>
+            ${sr3 > 0 ? `<span>SR3:<b>${esc(UI.num(sr3))}</b></span>` : ''}</div>`;
+
     const pick = done ? null : pickOf(r);
     let racks;
     if (!hasRacks(r)) {
-      racks = `<div class="dp-racks dp-racks--empty">${UI.chip('스토리지렉 재고 없음', 'warn')}</div>`;
+      racks = `<div class="dp-racks">${UI.chip('스토리지렉 재고 없음', 'muted')}</div>`;
     } else if (done) {
-      racks = `<div class="dp-racks"><span class="dp-racks__label">스토리지렉</span>${UI.rackChips(r.racks)}</div>`;
+      racks = `<div class="dp-racks">${UI.rackChips(r.racks)}</div>`;
     } else {
       const buttons = rackList(r).map(x => {
         const on = !!pick && String(pick.rack) === String(x.rack_code);
@@ -202,8 +248,8 @@
              <span>/ ${esc(UI.num(rackQty(r, pick.rack)))}개</span>
              <button type="button" class="btn-sm" data-act="take-all">전체</button>
            </div>`
-        : '<span class="dp-hint">가져올 곳을 누르고 수량을 넣으면 완료할 때 그 위치 재고가 차감됩니다.</span>';
-      racks = `<div class="dp-racks"><span class="dp-racks__label">가져올 곳</span>${buttons}${take}</div>`;
+        : '';
+      racks = `<div class="dp-racks">${buttons}</div>${take}`;
     }
     const takenQty = numOrNull(r.taken_qty);
     const taken = done && r.taken_rack_code && takenQty
@@ -212,12 +258,13 @@
 
     const who = [r.requested_by_name, UI.fmtDateTime(r.created_at)].filter(Boolean).join(' · ');
 
-    let side;
+    const total = numOrNull(r.stock_today);
+    let side = `<div class="dp-total"><span class="dp-total__label">총 재고</span><span class="dp-total__num${total === 0 ? ' is-zero' : ''}">${esc(UI.num(total))}</span></div>`;
     if (done) {
       const doneWho = [r.done_by_name, UI.fmtDateTime(r.done_at)].filter(Boolean).join(' ');
-      side = UI.chip('완료', 'ok') + (doneWho ? `<span class="dp-side-sub">완료 · ${esc(doneWho)}</span>` : '');
+      side += UI.chip('완료', 'ok') + (doneWho ? `<span class="dp-side-sub">완료 · ${esc(doneWho)}</span>` : '');
     } else {
-      side = UI.chip('미완료', 'warn');
+      side += UI.chip('미완료', 'warn');
     }
 
     const actions = (done
@@ -227,12 +274,11 @@
     return `
       <li class="wl-row${done ? ' is-done' : ''}" data-id="${esc(id)}">
         <div class="wl-main">
-          <button type="button" class="wl-code dp-code" data-act="open-item" title="상품조회에서 보기">${esc(r.item_code)}</button>
-          <div class="wl-name">${esc(r.item_name)}</div>
-          <div class="wl-meta"><span>진열 위치 <span class="dp-loc">${esc(locText(r.location_code))}</span></span><span>재고 <b>${esc(UI.num(r.stock_today))}</b></span></div>
+          <div class="dp-top"><span class="dp-loc">${esc(locText(r.location_code))}</span>${chips.join('')}</div>
+          <button type="button" class="wl-name dp-name" data-act="open-item" title="상품조회에서 보기">${esc(r.item_name || r.item_code)}</button>
+          ${stockInfo}
           ${racks}
           ${taken}
-          ${chips.length ? `<div class="wl-meta">${chips.join('')}</div>` : ''}
           ${r.request_note ? `<div class="dp-note">요청 메모: ${esc(r.request_note)}</div>` : ''}
           ${who ? `<div class="wl-meta">요청: ${esc(who)}</div>` : ''}
         </div>
@@ -261,9 +307,18 @@
       body.innerHTML = stateHtml(state.filter === 'open' ? '미완료 요청이 없습니다.' : '완료된 요청이 없습니다.', `전체 ${state.items.length}건`, 'show-all', '전체 보기');
       return;
     }
+    const groups = [];
+    for (const r of rows) {
+      const key = groupOf(r);
+      const last = groups[groups.length - 1];
+      if (last && last.key === key) last.rows.push(r);
+      else groups.push({ key, rows: [r] });
+    }
     body.innerHTML =
-      `<p class="dp-summary">표시 ${esc(UI.num(rows.length))}건 / 전체 ${esc(UI.num(state.items.length))}건</p>` +
-      `<ul class="wl-list">${rows.map(rowHtml).join('')}</ul>`;
+      `<p class="dp-summary">표시 ${esc(UI.num(rows.length))}건 / 전체 ${esc(UI.num(state.items.length))}건 · 가져올 곳 순</p>` +
+      groups.map(g => `
+        <h3 class="dp-group${g.key === GROUP_DONE || g.key === GROUP_NONE ? ' dp-group--plain' : ''}">${esc(groupLabel(g.key))}<span>${esc(UI.num(g.rows.length))}건</span></h3>
+        <ul class="wl-list">${g.rows.map(rowHtml).join('')}</ul>`).join('');
   }
 
   // 한 행만 다시 그린다(스크롤·필터 유지)
@@ -285,7 +340,7 @@
     const date = state.date;
     const seq = ++state.seq;
     if (!keep) state.sticky.clear();
-    if (state.loadedDate !== date) state.pick.clear();
+    if (state.loadedDate !== date) { state.pick.clear(); state.groupKey.clear(); }
     // 같은 날짜를 다시 불러올 때는 화면을 비우지 않는다(스크롤 유지)
     if (!(state.phase === 'ready' && state.loadedDate === date)) {
       state.phase = 'loading';
@@ -302,6 +357,7 @@
       state.index = new Map(state.items.map(r => [String(r.id), r]));
       state.loadedDate = date;
       state.phase = 'ready';
+      rememberGroups();
     } catch (err) {
       if (seq !== state.seq) return;
       state.items = [];

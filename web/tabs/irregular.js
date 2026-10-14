@@ -115,21 +115,19 @@
 .tab-irregular .irr-summary b{ color:#0f172a; }
 .tab-irregular .irr-batch{ display:flex; align-items:center; gap:6px; margin:14px 0 6px; font-size:13px; font-weight:700; color:#475569; word-break:break-all; }
 .tab-irregular .irr-batch:first-child{ margin-top:0; }
-.tab-irregular .irr-batch-dot{ flex:0 0 auto; width:12px; height:12px; border-radius:50%; background:linear-gradient(135deg, var(--tone-a), var(--tone-b)); }
+.tab-irregular .irr-batch-dot{ flex:0 0 auto; width:12px; height:12px; border-radius:50%; background:var(--tone); }
 /* 수집 회차별 색: 파랑 → 빨강(코랄) → 노랑(앰버) → 초록 → 보라 */
-.tab-irregular .irr-tone-0{ --tone-a:#38bdf8; --tone-b:#3b82f6; --tone-glow:rgba(59,130,246,.35); }
-.tab-irregular .irr-tone-1{ --tone-a:#fb7185; --tone-b:#f43f5e; --tone-glow:rgba(244,63,94,.35); }
-.tab-irregular .irr-tone-2{ --tone-a:#fbbf24; --tone-b:#f59e0b; --tone-glow:rgba(245,158,11,.4); }
-.tab-irregular .irr-tone-3{ --tone-a:#34d399; --tone-b:#10b981; --tone-glow:rgba(16,185,129,.35); }
-.tab-irregular .irr-tone-4{ --tone-a:#a78bfa; --tone-b:#8b5cf6; --tone-glow:rgba(139,92,246,.35); }
+.tab-irregular .irr-tone-0{ --tone:#3b82f6; }
+.tab-irregular .irr-tone-1{ --tone:#f43f5e; }
+.tab-irregular .irr-tone-2{ --tone:#f59e0b; }
+.tab-irregular .irr-tone-3{ --tone:#10b981; }
+.tab-irregular .irr-tone-4{ --tone:#8b5cf6; }
 .tab-irregular .irr-head{ display:flex; flex-wrap:nowrap; align-items:center; gap:6px; }
 .tab-irregular .irr-head > *{ flex:0 0 auto; white-space:nowrap; }
 .tab-irregular .irr-title{
-  display:inline-flex; align-items:baseline; gap:5px; padding:5px 14px 5px 12px; border-radius:999px;
-  background:linear-gradient(135deg, var(--tone-a, #38bdf8), var(--tone-b, #3b82f6)); color:#fff;
-  box-shadow:0 2px 6px var(--tone-glow, rgba(59,130,246,.35));
+  display:inline-flex; align-items:baseline; gap:5px; padding:5px 12px; border-radius:10px;
+  background:var(--tone, #3b82f6); color:#fff;
   font-size:22px; font-weight:800; line-height:1.1; letter-spacing:.5px; font-variant-numeric:tabular-nums;
-  text-shadow:0 1px 1px rgba(15,23,42,.18);
 }
 .tab-irregular .irr-title small{ font-size:11px; font-weight:700; letter-spacing:1px; opacity:.9; }
 .tab-irregular .irr-lines{ margin:8px 0 0; padding:0; list-style:none; }

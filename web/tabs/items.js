@@ -46,6 +46,7 @@
     pane: 'list',        // 좁은 화면에서 보이는 쪽: 'list' | 'detail'
     mode: 'view',        // 'view' | 'edit'
     noteFor: null,       // null | 'stock' | 'display'
+    rackForm: null,      // 열려 있는 스토리지렉 입출고 칸: {kind:'out', rack} | {kind:'in', rack(미리 채울 위치)}
     options: null,       // /item_options 응답
     optionsPromise: null,
     shownOnce: false,
@@ -162,6 +163,22 @@
 .tab-items .ti-section h3{ margin: 0 0 8px; font-size: 13px; font-weight: 700; color: #334155; }
 .tab-items .ti-stock{ display: flex; flex-wrap: wrap; gap: 6px 20px; margin-bottom: 8px; font-size: 13px; color: #64748b; }
 .tab-items .ti-stock b{ margin-left: 4px; font-size: 18px; color: #0f172a; }
+.tab-items .ti-racks{ display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tab-items .ti-rack{
+  appearance: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 10px;
+  border: 1px solid #bae6fd; border-radius: 10px; background: #e0f2fe; color: #075985;
+  font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.tab-items .ti-rack b{ font-size: 14px; color: #0369a1; }
+.tab-items .ti-rack.is-active{ background: #0ea5e9; border-color: #0284c7; color: #fff; }
+.tab-items .ti-rack.is-active b{ color: #fff; }
+.tab-items .ti-rack-in{ min-height: 36px; }
+.tab-items .ti-racks + .ti-hint{ margin-top: 6px; }
+.tab-items .ti-rack-code{ display: flex; gap: 6px; }
+.tab-items .ti-rack-code input{ flex: 1 1 auto; min-width: 0; }
+.tab-items .ti-rack-code select{ flex: 0 0 auto; width: auto; }
+.tab-items .ti-note [data-role="rack-qty"], .tab-items .ti-note [data-role="rack-presence"]{ margin-top: 16px; }
+.tab-items .ti-note [hidden]{ display: none; }
 .tab-items .ti-actions{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
 .tab-items .ti-actions button{ min-height: 40px; white-space: normal; }
 .tab-items .ti-actions .is-wide{ grid-column: 1 / -1; }
@@ -475,6 +492,90 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       </form>`;
   }
 
+  // 수정 · 스토리지렉 입출고는 매니저 이상만 한다(서버도 같은 기준으로 막는다).
+  function canManage() { return ['manager', 'admin'].includes(Shell.role()); }
+
+  function rackListOf(item) {
+    const st = (item && item.stock) || {};
+    return (Array.isArray(st.racks) ? st.racks : []).filter(r => r && r.rack_code);
+  }
+
+  // 렉을 눌렀을 때(출고) / '+ 입고'를 눌렀을 때 카드 안에 열리는 칸.
+  function rackFormHtml(item) {
+    const form = state.rackForm;
+    const racks = rackListOf(item);
+    const btns = label => `
+        <div class="ti-note-btns">
+          <button type="button" class="btn-ghost" data-act="rack-cancel">취소</button>
+          <button type="submit" class="btn-primary" data-act="rack-send">${label}</button>
+        </div>`;
+    if (form.kind === 'out') {
+      const hit = racks.find(r => String(r.rack_code) === String(form.rack));
+      if (!hit) return '';
+      const presence = UI.isPresenceRack(hit.rack_code);
+      const max = Number(hit.qty) || 0;
+      return `
+      <form class="ti-note" data-form="rack" data-kind="out" novalidate>
+        ${presence
+          ? '<p class="ti-hint">SR2는 수량을 세지 않습니다. 이 위치에서 상품을 뺍니다.</p>'
+          : `<div class="field">
+          <label for="tiRackQty" class="ti-hint">출고 수량</label>
+          <input id="tiRackQty" name="qty" type="number" inputmode="numeric" min="1" max="${esc(max)}" step="1" value="${esc(max)}" autocomplete="off" />
+        </div>`}
+        ${btns('출고')}
+      </form>`;
+    }
+    const init = UI.rackCode.split(form.rack);
+    if (!init.zone) init.zone = UI.rackCode.zones[0];
+    const zones = UI.rackCode.zones.includes(init.zone) ? UI.rackCode.zones : UI.rackCode.zones.concat(init.zone);
+    const presence = UI.isPresenceRack(init.zone + '-');
+    return `
+      <form class="ti-note" data-form="rack" data-kind="in" novalidate>
+        <div class="field">
+          <label for="tiRackCode" class="ti-hint">입고할 위치 (렉 코드)</label>
+          <div class="ti-rack-code">
+            <select id="tiRackZone" name="zone" aria-label="렉 구역">${zones.map(z =>
+              `<option value="${z}"${z === init.zone ? ' selected' : ''}>${z}</option>`).join('')}</select>
+            <input id="tiRackCode" name="rack" type="text" inputmode="numeric" autocomplete="off" placeholder="예: 05-02" value="${esc(init.rest)}" />
+            <button type="button" class="btn-sm" data-scan-for="#tiRackCode" title="사진으로 렉 코드 읽기" aria-label="사진으로 렉 코드 읽기">📷</button>
+          </div>
+        </div>
+        <div class="field" data-role="rack-qty"${presence ? ' hidden' : ''}>
+          <label for="tiRackQty" class="ti-hint">입고 수량</label>
+          <input id="tiRackQty" name="qty" type="number" inputmode="numeric" min="1" step="1" autocomplete="off" />
+        </div>
+        <p class="ti-hint" data-role="rack-presence"${presence ? '' : ' hidden'}>SR2는 수량 없이 '있음'으로 저장합니다.</p>
+        ${btns('입고')}
+      </form>`;
+  }
+
+  // 입고 칸: 고른 구역이 SR2면 수량 칸을 숨긴다.
+  function syncRackForm(form) {
+    const presence = UI.isPresenceRack(form.elements.zone.value + '-');
+    const qty = form.querySelector('[data-role="rack-qty"]');
+    const hint = form.querySelector('[data-role="rack-presence"]');
+    if (qty) qty.hidden = presence;
+    if (hint) hint.hidden = !presence;
+  }
+
+  function racksHtml(item) {
+    const racks = rackListOf(item);
+    if (!canManage()) return `<div class="ti-racks">${UI.rackChips(racks)}</div>`;
+    const active = state.rackForm && state.rackForm.kind === 'out' ? String(state.rackForm.rack) : '';
+    const buttons = racks.map(r => {
+      const on = active === String(r.rack_code);
+      return `<button type="button" class="ti-rack${on ? ' is-active' : ''}" data-act="rack-out" data-rack="${esc(r.rack_code)}" aria-pressed="${on ? 'true' : 'false'}" title="이 위치에서 출고">${esc(r.rack_code)}<b>${
+        UI.isPresenceRack(r.rack_code) ? '있음' : `${esc(UI.num(r.qty))}개`}</b></button>`;
+    }).join('');
+    return `
+          <div class="ti-racks">
+            ${buttons || UI.chip('스토리지렉 재고 없음', 'muted')}
+            <button type="button" class="btn-sm ti-rack-in" data-act="rack-in">+ 입고</button>
+          </div>
+          ${racks.length ? '<p class="ti-hint">렉을 누르면 그 위치에서 출고합니다.</p>' : ''}
+          ${state.rackForm ? rackFormHtml(item) : ''}`;
+  }
+
   function viewHtml(item) {
     const pk = item.packaging || {};
     const st = item.stock || {};
@@ -507,17 +608,17 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
         <div class="ti-section">
           <h3>재고정보</h3>
           <div class="ti-stock">
-            <span>SR1:<b>${esc(UI.num(rowQty('SR1')))}</b></span>
+            <span>SR1:<b>${rowQty('SR1') > 0 ? esc(UI.num(rowQty('SR1'))) : '없음'}</b></span>
             <span>SR2:<b>${esc(sr2Text)}</b></span>
             ${sr3Qty > 0 ? `<span>SR3:<b>${esc(UI.num(sr3Qty))}</b></span>` : ''}
             <span>총재고:<b>${esc(UI.num(st.total))}</b></span>
           </div>
-          <div class="ti-racks">${UI.rackChips(st.racks)}</div>
+          ${racksHtml(item)}
         </div>
         <div class="ti-actions">
           ${requestButtonHtml('stock', item)}
           ${requestButtonHtml('display', item)}
-          <button type="button" class="btn-primary is-wide" data-act="edit">수정</button>
+          ${canManage() ? '<button type="button" class="btn-primary is-wide" data-act="edit">수정</button>' : ''}
         </div>
         ${state.noteFor ? noteFormHtml(state.noteFor, item) : ''}
         ${Shell.can('logs') ? '<button type="button" class="ti-link" data-act="logs">이 상품 작업로그 보기</button>' : ''}
@@ -754,6 +855,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       state.item = null;
       state.mode = 'view';
       state.noteFor = null;
+      state.rackForm = null;
       state.detailLoading = true;
       renderDetail();
     }
@@ -849,6 +951,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
   }
 
   function openNote(kind) {
+    state.rackForm = null;
     state.noteFor = kind;
     renderDetail();
     const input = $('#tiNoteInput');
@@ -879,6 +982,79 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
     });
   }
 
+  function openRackForm(form) {
+    const same = state.rackForm && form && state.rackForm.kind === form.kind && String(state.rackForm.rack || '') === String(form.rack || '');
+    state.noteFor = null;
+    state.rackForm = same ? null : form;   // 같은 렉을 다시 누르면 닫는다
+    renderDetail();
+    const input = $(state.rackForm && state.rackForm.kind === 'in' && !state.rackForm.rack ? '#tiRackCode' : '#tiRackQty');
+    if (input) {
+      input.focus();
+      if (input.id === 'tiRackCode') {
+        try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) {}
+      } else if (input.select) input.select();
+      try { input.scrollIntoView({ block: 'center' }); } catch (_) {}
+    }
+  }
+
+  // 스토리지렉 재고가 바뀌었으면 창고네비도 최신으로 맞춘다(실패해도 이 탭에는 영향 없음).
+  function refreshMap() {
+    try {
+      if (typeof loadCells === 'function') Promise.resolve(loadCells()).catch(() => {});
+      if (typeof loadMovements === 'function') Promise.resolve(loadMovements()).catch(() => {});
+    } catch (_) {}
+  }
+
+  function sendRack(form) {
+    const kind = form.dataset.kind;
+    const item = state.item;
+    const button = form.querySelector('[data-act="rack-send"]');
+    if (!item || !state.rackForm) return undefined;
+    const code = item.code;
+    let rack;
+    let qty;
+    if (kind === 'out') {
+      const hit = rackListOf(item).find(r => String(r.rack_code) === String(state.rackForm.rack));
+      if (!hit) { UI.toast('이 위치에 재고가 없습니다', 'error'); return undefined; }
+      rack = String(hit.rack_code);
+      const max = Number(hit.qty) || 0;
+      if (UI.isPresenceRack(rack)) qty = max;   // SR2는 통째로 뺀다
+      else {
+        qty = Number(String(form.elements.qty.value).trim());
+        if (!Number.isInteger(qty) || qty < 1 || qty > max) {
+          UI.toast(`출고 수량을 1~${UI.num(max)} 사이로 입력해 주세요`, 'error');
+          form.elements.qty.focus();
+          return undefined;
+        }
+      }
+    } else {
+      rack = UI.rackCode.read(form);
+      if (!rack) {
+        UI.toast('입고할 위치(렉 코드)를 끝까지 입력해 주세요 (예: 05-02)', 'error');
+        form.elements.rack.focus();
+        return undefined;
+      }
+      if (UI.isPresenceRack(rack)) qty = 1;     // SR2는 '있음'으로만 남긴다
+      else {
+        qty = Number(String(form.elements.qty.value).trim());
+        if (!Number.isInteger(qty) || qty < 1) {
+          UI.toast('입고 수량을 1 이상의 숫자로 입력해 주세요', 'error');
+          form.elements.qty.focus();
+          return undefined;
+        }
+      }
+    }
+    return UI.busy(button, async () => {
+      await UI.api.post(kind === 'out' ? '/outbound' : '/inbound', { rack_code: rack, item_code: code, qty });
+      const amount = UI.isPresenceRack(rack) ? '' : ` ${UI.num(qty)}개`;
+      UI.toast(kind === 'out' ? `${rack}에서${amount} 출고했습니다` : `${rack}에${amount} 입고했습니다`, 'ok');
+      refreshMap();
+      if (state.code !== code) return;
+      state.rackForm = null;
+      await loadDetail(code, { silent: true });
+    });
+  }
+
   async function backToList() {
     setPane('list');
     // 코드로 바로 들어온 경우 목록이 비어 있으므로 검색창 내용으로 채운다.
@@ -900,6 +1076,9 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       else if (act === 'req-stock') openNote('stock');
       else if (act === 'req-display') openNote('display');
       else if (act === 'note-cancel') { state.noteFor = null; renderDetail(); }
+      else if (act === 'rack-out') openRackForm({ kind: 'out', rack: actEl.dataset.rack });
+      else if (act === 'rack-in') openRackForm({ kind: 'in', rack: '' });
+      else if (act === 'rack-cancel') { state.rackForm = null; renderDetail(); }
       else if (act === 'logs') { if (state.code) Shell.show('logs', { q: state.code }); }
       else if (act === 'scan') scanPhoto(actEl);
       else if (act === 'scan-pick') applyScan((state.scan || [])[Number(actEl.dataset.idx)]);
@@ -924,6 +1103,8 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       saveEdit(form);
     } else if (kind === 'note') {
       sendRequest(form);
+    } else if (kind === 'rack') {
+      sendRack(form);
     }
   }
 
@@ -934,6 +1115,11 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       scheduleSearch(target.value);
       return;
     }
+    if (target.id === 'tiRackCode') {   // 직접 입력했거나 사진으로 읽은 렉 코드
+      const form = target.closest('form');
+      if (form) { UI.rackCode.apply(form, target.value); syncRackForm(form); }
+      return;
+    }
     if (target.classList && target.classList.contains('is-invalid')) {
       const form = target.closest('form[data-form="edit"]');
       if (form && state.item) showErrors(form, collectPatch(form, state.item).errors);
@@ -941,6 +1127,11 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
   }
 
   function onChange(ev) {
+    if (ev.target.id === 'tiRackZone') {
+      const form = ev.target.closest('form');
+      if (form) { syncRackForm(form); form.elements.rack.focus(); }
+      return;
+    }
     if (ev.target.name === 'boxtype') {
       const form = ev.target.closest('form[data-form="edit"]');
       if (form) applyCarrierRule(form);
@@ -1016,7 +1207,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
   }
 
   function onRemoteChange() {
-    if (state.mode === 'edit' || state.noteFor) return false;
+    if (state.mode === 'edit' || state.noteFor || state.rackForm) return false;
     if (state.code && state.item && !state.detailLoading) loadDetail(state.code, { silent: true });
     return true;
   }

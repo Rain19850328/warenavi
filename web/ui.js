@@ -138,6 +138,40 @@
     return /^SR2-/i.test(String(rackCode || '').trim());
   }
 
+  // 렉 코드 입력 도우미(상품조회·재고확인의 입고 칸이 함께 쓴다).
+  //   구역(SR1/SR2 …)은 선택 상자로 고르고, 옆 칸에는 뒤쪽만 친다. 숫자는 두 자리마다 '-'를 넣는다(0502 → 05-02).
+  //   SR2의 정식 표기는 글자-숫자(SR2-A-01)라서 A~F 글자로 시작하는 뒤쪽은 그대로 살린다.
+  //   사진으로 읽었거나 붙여 넣은 전체 코드(SR3-10-01, SR-02-A-01)는 구역과 뒤쪽으로 나눈다.
+  const RACK_ZONES = ['SR1', 'SR2'];
+  function splitRackCode(value) {
+    const v = String(value || '').toUpperCase().replace(/\s+/g, '');
+    const m = /^SR-?(\d{1,2})(?:-(.*))?$/.exec(v);
+    const zone = m ? `SR${Number(m[1])}` : '';
+    const raw = m ? (m[2] || '') : v;
+    const letter = /^[A-F]/.test(raw) ? raw[0] : '';
+    const digits = raw.replace(/\D/g, '').slice(0, 4);
+    const rest = letter
+      ? (digits ? `${letter}-${digits.slice(0, 2)}` : letter)
+      : (digits.match(/\d{1,2}/g) || []).join('-');
+    return { zone, rest };
+  }
+  // 입력 칸(form.elements.zone / .rack)에 값을 나눠 넣는다. 선택 상자에 없는 구역이면 항목을 추가한다.
+  function applyRackCode(form, value) {
+    const parts = splitRackCode(value);
+    const select = form.elements.zone;
+    if (parts.zone && select) {
+      if (!Array.from(select.options).some(o => o.value === parts.zone)) select.add(new Option(parts.zone, parts.zone));
+      select.value = parts.zone;
+    }
+    if (form.elements.rack.value !== parts.rest) form.elements.rack.value = parts.rest;
+    return parts;
+  }
+  // 입력 칸에서 전체 렉 코드를 읽는다. 뒤쪽을 끝까지 적지 않았으면 ''.
+  function readRackCode(form) {
+    const rest = splitRackCode(form.elements.rack.value).rest;
+    return /^(\d{2}-\d{2}|[A-F]-\d{2})$/.test(rest) ? `${form.elements.zone.value}-${rest}` : '';
+  }
+
   function rackChips(racks) {
     const list = Array.isArray(racks) ? racks.filter(r => r && r.rack_code) : [];
     if (!list.length) return chip('스토리지렉 재고 없음', 'muted');
@@ -146,36 +180,46 @@
 
   /* ---------- date bar ---------- */
   // set(ymd)는 화면 값만 바꾸고 onChange는 부르지 않는다(사용자 조작일 때만 호출).
-  function dateBar(container, { value, onChange } = {}) {
-    let current = isYmd(value) ? value : today();
+  // allowAll: '전체' 버튼을 함께 보여 준다. 이때 값 ''는 "날짜 전체"를 뜻한다.
+  function dateBar(container, { value, onChange, allowAll = false } = {}) {
+    let current = isYmd(value) ? value : (allowAll ? '' : today());
     const wrap = document.createElement('div');
     wrap.className = 'date-bar';
     // 탭 제목 오른쪽에 들어가는 작은 날짜칸. '오늘' 버튼은 다른 날짜를 보고 있을 때만 나온다.
     wrap.innerHTML = `
-      <button type="button" class="btn-sm date-bar__today" data-act="today" hidden>오늘</button>
+      ${allowAll
+        ? '<button type="button" class="btn-sm date-bar__all" data-act="all">전체</button>'
+        : '<button type="button" class="btn-sm date-bar__today" data-act="today" hidden>오늘</button>'}
       <input type="date" class="date-bar__input" aria-label="날짜" />`;
     const input = wrap.querySelector('input');
     const todayBtn = wrap.querySelector('[data-act="today"]');
+    const allBtn = wrap.querySelector('[data-act="all"]');
+    const valid = v => isYmd(v) || (allowAll && v === '');
     const sync = () => {
       input.value = current;
-      todayBtn.hidden = current === today();
+      if (todayBtn) todayBtn.hidden = current === today();
+      if (allBtn) {
+        allBtn.classList.toggle('is-active', current === '');
+        allBtn.setAttribute('aria-pressed', current === '' ? 'true' : 'false');
+      }
     };
     sync();
 
     const commit = next => {
-      if (!isYmd(next)) { sync(); return; }
+      if (!valid(next)) { sync(); return; }
       const changed = next !== current;
       current = next;
       sync();
       if (changed && typeof onChange === 'function') onChange(current);
     };
     input.addEventListener('change', () => commit(input.value));
-    todayBtn.addEventListener('click', () => commit(today()));
+    if (todayBtn) todayBtn.addEventListener('click', () => commit(today()));
+    if (allBtn) allBtn.addEventListener('click', () => commit(''));
 
     if (container) container.append(wrap);
     return {
       get: () => current,
-      set: ymd => { if (isYmd(ymd)) { current = ymd; sync(); } },
+      set: ymd => { if (valid(ymd)) { current = ymd; sync(); } },
     };
   }
 
@@ -278,6 +322,7 @@
     chip,
     isPresenceRack,
     rackChips,
+    rackCode: { zones: RACK_ZONES, split: splitRackCode, apply: applyRackCode, read: readRackCode },
     dateBar,
     busy,
     api: { get: apiGet, post: apiPost },

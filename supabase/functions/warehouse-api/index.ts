@@ -26,11 +26,14 @@ const ROUTE_MIN_ROLE: Record<string, Role> = {
   "POST /inbound": "manager",
   "POST /outbound": "manager",
   "POST /move": "manager",
+  "POST /item/update": "manager",
   "POST /set_location": "admin",
   "POST /new_inbound_list/import": "admin",
   "POST /new_inbound_list/process": "admin",
   "POST /stock_status": "admin",
   "POST /soldout_items/remove": "admin",
+  "POST /soldout_items/revert": "admin",
+  "POST /soldout_items/decide": "admin",
   "GET /stock_reviews": "admin",
   "POST /stock_reviews/decide": "admin",
   "POST /stock_reviews/send": "admin",
@@ -1051,6 +1054,18 @@ Deno.serve(async (req) => {
 
     // ---- 확인요청 (불일치 건을 관리자가 반영 / 보류 / 미반영으로 판단) ----
     if (req.method === "GET" && path === "/stock_reviews") {
+      // all=1 이면 날짜 전체, date 가 오면 그 날짜의 불일치 건(화면에서 대기 / 보류 / 반영 / 미반영으로 나눠 본다).
+      const reviewDate = url.searchParams.get("date");
+      const reviewAll = url.searchParams.get("all") === "1";
+      if (reviewAll || reviewDate) {
+        return json(
+          req,
+          await callRpc("warehouse_get_stock_review_list_by_date", {
+            p_date: reviewAll ? null : getDateParam(reviewDate),
+            p_all: reviewAll,
+          }),
+        );
+      }
       return json(
         req,
         await callRpc("warehouse_get_stock_review_list", {
@@ -1191,6 +1206,10 @@ Deno.serve(async (req) => {
 
     // ---- 품절관리 ----
     if (req.method === "GET" && path === "/soldout_items") {
+      // all=1 이면 날짜 전체.
+      if (url.searchParams.get("all") === "1") {
+        return json(req, await callRpc("warehouse_get_soldout_list_all", {}));
+      }
       return json(
         req,
         await callRpc("warehouse_get_soldout_list", {
@@ -1208,6 +1227,35 @@ Deno.serve(async (req) => {
           p_source: String(payload.source ?? "").trim(),
           p_source_id: getUuidParam(payload.source_id, "출처 항목", false),
           p_date: getDateParam(payload.date),
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    // 품절관리 판단 버튼(완료 | 보류 | 미반영): 재고상태는 그대로 두고 판단 표시만 남긴다.
+    if (req.method === "POST" && path === "/soldout_items/decide") {
+      const payload = await readBody(req);
+      return json(
+        req,
+        await callRpc("warehouse_decide_soldout_item", {
+          p_soldout_id: getUuidParam(payload.id, "품절관리 항목"),
+          p_decision: String(payload.decision ?? "").trim(),
+          p_actor_user_id: auth.userId,
+          p_actor_email: auth.email,
+          p_actor_name: auth.name,
+        }),
+      );
+    }
+
+    // 품절관리 판단 취소 / 보류 해제: 판단 표시만 지운다(재고상태는 건드리지 않는다).
+    if (req.method === "POST" && path === "/soldout_items/revert") {
+      const payload = await readBody(req);
+      return json(
+        req,
+        await callRpc("warehouse_revert_soldout_status", {
+          p_soldout_id: getUuidParam(payload.id, "품절관리 항목"),
           p_actor_user_id: auth.userId,
           p_actor_email: auth.email,
           p_actor_name: auth.name,
