@@ -495,6 +495,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
 
   // 수정 · 스토리지렉 입출고는 매니저 이상만 한다(서버도 같은 기준으로 막는다).
   function canManage() { return ['manager', 'admin'].includes(Shell.role()); }
+  function isAdmin() { return Shell.role() === 'admin'; }
 
   function rackListOf(item) {
     const st = (item && item.stock) || {};
@@ -619,6 +620,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
         <div class="ti-actions">
           ${canManage() ? '<button type="button" class="btn-primary" data-act="edit">수정</button>' : ''}
           ${requestButtonHtml('display', item)}
+          ${isAdmin() ? requestButtonHtml('stock', item).replace('class="btn-ghost', 'class="btn-ghost is-wide') : ''}
         </div>
         ${state.noteFor ? noteFormHtml(state.noteFor, item) : ''}
         ${Shell.can('logs') ? '<button type="button" class="ti-link" data-act="logs">이 상품 작업기록 보기</button>' : ''}
@@ -1073,6 +1075,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       else if (act === 'reload') { if (state.code) loadDetail(state.code); }
       else if (act === 'edit') startEdit(actEl);
       else if (act === 'edit-cancel') { state.mode = 'view'; renderDetail(); }
+      else if (act === 'req-stock' && isAdmin()) openNote('stock');
       else if (act === 'req-display') openNote('display');
       else if (act === 'note-cancel') { state.noteFor = null; renderDetail(); }
       else if (act === 'rack-out') openRackForm({ kind: 'out', rack: actEl.dataset.rack });
