@@ -185,9 +185,20 @@ async function playautoAuth(force = false): Promise<string> {
     headers: { "x-api-key": keys.apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({ email: keys.email, password: keys.password }),
   });
-  const body = await res.json().catch(() => null);
+  const raw = await res.text().catch(() => "");
+  let body: unknown = null;
+  try { body = JSON.parse(raw); } catch (_) { /* JSON이 아니면 원문을 그대로 남긴다 */ }
   const token = Array.isArray(body) && body[0] && typeof body[0].token === "string" ? body[0].token : "";
-  if (!res.ok || !token) throw new Error(`플레이오토 인증 실패 (HTTP ${res.status})`);
+  if (!res.ok || !token) {
+    // 실패 이유를 알 수 있게 플레이오토 응답 내용을 붙인다. 혹시 들어 있을 수 있는 계정 정보는 가린다.
+    let detail = raw.replace(/\s+/g, " ").trim();
+    for (const secret of [keys.password, keys.apiKey, keys.email]) {
+      if (secret) detail = detail.split(secret).join("***");
+    }
+    detail = detail.replace(/("token"\s*:\s*")[^"]*"/gi, '$1***"').slice(0, 240);
+    console.error(`[playauto] auth failed: HTTP ${res.status} ${detail}`);
+    throw new Error(`플레이오토 인증 실패 (HTTP ${res.status})${detail ? ` · 응답: ${detail}` : " · 응답 내용 없음"}`);
+  }
   playautoToken.token = token;
   playautoToken.date = today;
   return token;
