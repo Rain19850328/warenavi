@@ -56,7 +56,7 @@ jobs:
           echo "project_id=$SUPABASE_PROJECT_ID" >> "$GITHUB_OUTPUT"
 
       - name: Push database migrations
-        run: supabase db push --db-url "$SUPABASE_DB_URL" --include-all
+        run: supabase db push --yes --db-url "$SUPABASE_DB_URL" --include-all
 
       - name: Sync Edge Function secrets
         shell: bash
