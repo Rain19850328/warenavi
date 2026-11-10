@@ -106,14 +106,14 @@ class Warehouse:
         self.cfg = cfg
 
     def rpc(self, name: str, args: dict | None = None):
+        headers = {"apikey": self.cfg.service_key, "Content-Type": "application/json"}
+        # 예전 service_role 키(JWT)는 Authorization 에도 넣는다. 새 secret 키(sb_secret_...)는 apikey 만 보낸다.
+        if not self.cfg.service_key.startswith("sb_"):
+            headers["Authorization"] = f"Bearer {self.cfg.service_key}"
         status, text = http(
             "POST",
             f"{self.cfg.supabase_url}/rest/v1/rpc/{name}",
-            {
-                "apikey": self.cfg.service_key,
-                "Authorization": f"Bearer {self.cfg.service_key}",
-                "Content-Type": "application/json",
-            },
+            headers,
             args or {},
         )
         if status >= 400:
