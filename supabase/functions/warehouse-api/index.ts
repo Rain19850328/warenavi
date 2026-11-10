@@ -144,6 +144,10 @@ const playautoToken = { token: "", date: "" };   // 하루치 토큰을 재사�
 // 이 앱이 재고 조회에 쓰는 몫은 PLAYAUTO_DAILY_LIMIT(기본 2,000회)까지. 수정 · 인증은 몫과 상관없이 보낸다.
 const PLAYAUTO_LOOKUP_LIMIT = Number(Deno.env.get("PLAYAUTO_DAILY_LIMIT")) || 2000;
 const PLAYAUTO_TIMEOUT_MS = 8000;
+// 플레이오토는 등록된 IP(사무실)에서만 API를 받는다. 기본은 사무실 전송기(tools/playauto_worker.py)가 보내는 방식:
+// 이 서버는 반영 건을 '전송 대기'로만 남기고 플레이오토를 직접 부르지 않는다. PLAYAUTO_SEND_MODE=direct 면 예전처럼 직접 보낸다.
+const PLAYAUTO_OFFICE = (Deno.env.get("PLAYAUTO_SEND_MODE") ?? "office").trim().toLowerCase() !== "direct";
+const OFFICE_QUEUED = "사무실 전송기가 보낼 예정입니다";
 const playautoPace = { last: 0, lastWork: 0 };
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1073,7 +1077,7 @@ Deno.serve(async (req) => {
       const itemCode = String(payload.item_code ?? "").trim();
       const source = String(payload.source ?? "").trim();
       // 진열보충에서 요청할 때만 플레이오토 현재 재고를 1건 조회해 함께 남긴다.
-      const live: LiveStock | null = source === "display" ? await playautoLiveStock(itemCode) : null;
+      const live: LiveStock | null = source === "display" && !PLAYAUTO_OFFICE ? await playautoLiveStock(itemCode) : null;
       const result = await callRpc("warehouse_request_stock_check", {
         p_item_code: itemCode,
         p_source: source,
@@ -1100,7 +1104,7 @@ Deno.serve(async (req) => {
       const result = String(payload.result ?? "").trim();
       // 일치 / 불일치를 기록할 때 그 상품의 플레이오토 현재 재고를 1건 조회해 비교 기준으로 쓴다.
       let live: LiveStock | null = null;
-      if (result === "match" || result === "mismatch") {
+      if (!PLAYAUTO_OFFICE && (result === "match" || result === "mismatch")) {
         const row = await callRpc("warehouse_get_stock_check_item", { p_id: id }) as Record<string, unknown> | null;
         if (row) live = await playautoLiveStock(row.item_code);
       }
@@ -1175,7 +1179,9 @@ Deno.serve(async (req) => {
       // 반영이면 판단을 먼저 남기고 플레이오토로 보낸다. 전송이 실패해도 판단은 남고, 화면에서 다시 보낼 수 있다.
       const item = decided?.item;
       if (decision !== "applied" || !item || item.playauto_status === "sent") return json(req, decided);
-      const sent = await sendStockToPlayauto(item.item_code, item.counted_qty, item.live_stock);
+      const sent: PlayautoResult = PLAYAUTO_OFFICE
+        ? { status: "pending", message: OFFICE_QUEUED }
+        : await sendStockToPlayauto(item.item_code, item.counted_qty, item.live_stock);
       return json(
         req,
         await callRpc("warehouse_set_stock_check_playauto", {
@@ -1192,7 +1198,7 @@ Deno.serve(async (req) => {
     // 오늘 플레이오토 호출 수(오전 9시 기준)와 이 앱의 조회 한도
     if (req.method === "GET" && path === "/playauto_usage") {
       const usage = await callRpc("warehouse_playauto_usage") as Record<string, unknown>;
-      return json(req, { ...usage, lookup_limit: PLAYAUTO_LOOKUP_LIMIT, daily_limit: 12000 });
+      return json(req, { ...usage, lookup_limit: PLAYAUTO_LOOKUP_LIMIT, daily_limit: 12000, mode: PLAYAUTO_OFFICE ? "office" : "direct" });
     }
 
     // 전송 대기 · 실패로 남은 반영 건을 다시 보낸다.
@@ -1203,7 +1209,9 @@ Deno.serve(async (req) => {
       if (!item) throw new Error("실사반영 항목을 찾을 수 없습니다.");
       if (item.review_status !== "applied") throw new Error("반영으로 판단한 항목만 플레이오토로 보낼 수 있습니다.");
       if (item.playauto_status === "sent") throw new Error("이미 플레이오토로 전송된 건입니다.");
-      const sent = await sendStockToPlayauto(item.item_code, item.counted_qty, item.live_stock);
+      const sent: PlayautoResult = PLAYAUTO_OFFICE
+        ? { status: "pending", message: OFFICE_QUEUED }
+        : await sendStockToPlayauto(item.item_code, item.counted_qty, item.live_stock);
       return json(
         req,
         await callRpc("warehouse_set_stock_check_playauto", {

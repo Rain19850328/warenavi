@@ -33,3 +33,5 @@ coverage/
 # temporary
 tmp/
 temp/
+# office PlayAuto worker log
+tools/playauto_worker.log
