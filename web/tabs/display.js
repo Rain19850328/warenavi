@@ -516,8 +516,11 @@
       }));
       if (res === undefined) return;
       const existed = !!res && res.created === false;
-      const live = res && res.live && res.live.stock !== null && res.live.stock !== undefined
-        ? ` · 플레이오토 재고 ${UI.num(res.live.stock)}개` : '';
+      // 서버가 돌려준 재고실사 줄의 live_stock = 요청할 때 읽은 MOPS 장부 실재고(장부에 없으면 null → 표시 안 함)
+      // (지금 요청 RPC는 { ok, id, created }만 돌려주므로 item이 없으면 최상위 live_stock도 본다.)
+      const liveStock = !res ? null : res.item && res.item.live_stock !== undefined ? res.item.live_stock : res.live_stock;
+      const live = liveStock !== null && liveStock !== undefined && liveStock !== '' && Number.isFinite(Number(liveStock))
+        ? ` · MOPS 장부 실재고 ${UI.num(Number(liveStock))}개` : '';
       UI.toast(`${existed ? '이미 오늘 재고실사 목록에 있는 상품입니다' : '재고실사 목록에 추가했습니다'}${live}`, existed ? 'info' : 'ok');
       const cur = state.index.get(id);
       if (cur) { cur.stock_requested = true; replaceRow(id); }

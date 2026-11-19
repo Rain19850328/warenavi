@@ -1,6 +1,6 @@
 // tabs/review.js — 실사반영 탭(관리자 전용)
 // 재고실사에서 불일치로 기록된 건을 날짜별로 보여 주고, 관리자가 반영 / 보류 / 미반영을 판단한다(품절처리 탭과 같은 배치).
-// 반영하면 '전송 대기'로 남고, 사무실 PC의 전송기(tools/playauto_worker.py)가 1분 안에 플레이오토로 보낸다. 실패한 건은 다시 보낼 수 있다.
+// 반영하면 서버가 그 자리에서 MOPS 장부 실재고를 센 수량으로 맞추고 결과(반영 완료/실패)를 돌려준다. 실패한 건은 다시 반영할 수 있다.
 (function () {
   'use strict';
 
@@ -61,9 +61,9 @@
     rejected: { label: '미반영', tone: 'muted' },
   };
   const PLAYAUTO = {
-    pending: ['플레이오토 전송 대기', 'warn'],
-    sent: ['플레이오토 전송 완료', 'ok'],
-    failed: ['플레이오토 전송 실패', 'danger'],
+    pending: ['MOPS 반영 대기', 'warn'],
+    sent: ['MOPS 반영 완료', 'ok'],
+    failed: ['MOPS 반영 실패', 'danger'],
   };
 
   const state = {
@@ -80,7 +80,6 @@
     seq: 0,
     sticky: new Set(),     // 방금 판단한 줄: 목록 조건에서 벗어나도 제자리에 둔다
     memos: new Map(),      // String(id) -> 입력 중인 메모
-    usage: null,           // 오늘 플레이오토 호출 수 { calls, daily_limit }
   };
 
   const esc = v => UI.esc(v);
@@ -134,9 +133,9 @@
     const diffText = d === null ? '-' : `${d > 0 ? '+' : ''}${UI.num(d)}`;
     const atCheck = numOrNull(r.db_stock);
     const pa = numOrNull(r.live_stock);
-    // 재고실사 때 조회한 플레이오토 재고가 있으면 그것이 비교 기준이고, 반영할 때 그 뒤에 팔린 만큼 빼서 보낸다.
+    // 재고실사 때 읽은 MOPS 장부 실재고가 있으면 그것이 비교 기준이다. 반영해도 그 뒤 팔리거나 들어온 수량은 장부에 그대로 남는다.
     const sub = pa !== null
-      ? `<div class="rv-sub">재고실사 때 플레이오토 재고 <b>${esc(UI.num(pa))}</b>개${r.live_stock_at ? ` (${esc(UI.fmtDateTime(r.live_stock_at))})` : ''} · 반영하면 그 뒤 팔린 수량만큼 빼서 보냅니다.</div>`
+      ? `<div class="rv-sub">재고실사 때 MOPS 장부 실재고 <b>${esc(UI.num(pa))}</b>개${r.live_stock_at ? ` (${esc(UI.fmtDateTime(r.live_stock_at))})` : ''} · 반영해도 그 뒤 팔리거나 들어온 수량은 그대로 유지됩니다.</div>`
       : atCheck !== null && db !== null && atCheck !== db
         ? `<div class="rv-sub">불일치를 기록할 때의 DB재고는 ${esc(UI.num(atCheck))}개였습니다.</div>` : '';
     const done = r.review_status === 'applied';
@@ -156,9 +155,9 @@
   function actionsHtml(r) {
     const id = String(r.id);
     if (isDecided(r)) {
-      if (r.playauto_status === 'sent') return '';   // 플레이오토에 들어간 재고는 여기서 되돌릴 수 없다
+      if (r.playauto_status === 'sent') return '';   // MOPS 장부에 반영된 재고는 여기서 되돌릴 수 없다
       const resend = r.review_status === 'applied'
-        ? '<button type="button" class="btn-primary" data-act="send">플레이오토 다시 전송</button>'
+        ? '<button type="button" class="btn-primary" data-act="send">다시 반영</button>'
         : '';
       return `${resend}<button type="button" class="btn-ghost btn-sm" data-act="decide" data-val="pending">판단 취소</button>`;
     }
@@ -192,7 +191,7 @@
       notes.push(`<div class="rv-note">${esc(text)}</div>`);
     }
     if (r.playauto_status && r.playauto_message) {
-      notes.push(`<div class="rv-note${r.playauto_status === 'sent' ? '' : ' rv-note--reason'}">플레이오토: ${esc(r.playauto_message)}</div>`);
+      notes.push(`<div class="rv-note${r.playauto_status === 'sent' ? '' : ' rv-note--reason'}">MOPS: ${esc(r.playauto_message)}</div>`);
     }
     const checked = [r.checked_by_name, UI.fmtDateTime(r.checked_at)].filter(Boolean).join(' · ');
 
@@ -211,34 +210,7 @@
 
   function summaryHtml() {
     const c = bucketCounts();
-    const u = state.usage;
-    const usage = u ? `<br><small>오늘 플레이오토 사용 ${esc(UI.num(u.calls))}회 / 하루 ${esc(UI.num(u.daily_limit))}회 (오전 9시 초기화)</small>${workerHtml(u)}` : '';
-    return `총 <b>${esc(UI.num(c.all))}</b>건 · 대기 <b>${esc(UI.num(c.wait))}</b> · 보류 <b>${esc(UI.num(c.held))}</b> · 반영 <b>${esc(UI.num(c.done))}</b> · 미반영 <b>${esc(UI.num(c.rejected))}</b>${usage}`;
-  }
-
-  // 사무실 전송기 상태: 플레이오토는 사무실 IP에서만 받으므로 실제 전송은 사무실 PC의 전송기가 한다.
-  function workerHtml(u) {
-    if (u.mode !== 'office') return '';
-    const queue = Number(u.queue) || 0;
-    const seen = u.worker_seen_at ? new Date(u.worker_seen_at) : null;
-    const mins = seen ? Math.floor((Date.now() - seen.getTime()) / 60000) : null;
-    const info = u.worker_info || {};
-    let text;
-    let bad = false;
-    if (mins === null) { text = '사무실 전송기가 아직 한 번도 연결되지 않았습니다'; bad = true; }
-    else if (mins >= 10) { text = `사무실 전송기 응답 없음 (마지막 확인 ${mins}분 전) · 사무실 PC가 켜져 있는지 확인하세요`; bad = true; }
-    else text = `사무실 전송기 정상 (${mins < 1 ? '방금' : `${mins}분 전`} 확인)`;
-    if (info.error) { text += ` · 오류: ${info.error}`; bad = true; }
-    const cls = bad ? ' style="color:var(--danger, #c0392b)"' : '';
-    return `<br><small${cls}>${esc(text)} · 전송 대기 ${esc(UI.num(queue))}건</small>`;
-  }
-
-  // 오늘 플레이오토 호출 수(실패해도 화면에는 영향 없음)
-  async function loadUsage() {
-    try {
-      state.usage = await UI.api.get('/playauto_usage');
-      syncToolbar();
-    } catch (_) { /* 표시만 빠진다 */ }
+    return `총 <b>${esc(UI.num(c.all))}</b>건 · 대기 <b>${esc(UI.num(c.wait))}</b> · 보류 <b>${esc(UI.num(c.held))}</b> · 반영 <b>${esc(UI.num(c.done))}</b> · 미반영 <b>${esc(UI.num(c.rejected))}</b>`;
   }
 
   function stateHtml(text, sub, btnAct, btnLabel) {
@@ -327,7 +299,6 @@
     }
     renderBody();
     syncToolbar();
-    loadUsage();
   }
 
   function confirmText(r, decision) {
@@ -335,10 +306,7 @@
     const counted = numOrNull(r.counted_qty);
     const head = `${r.item_name || r.item_code}\n총 재고 ${UI.num(db)} → 실재고 ${UI.num(counted)}`;
     if (decision === 'applied') {
-      const pa = numOrNull(r.live_stock);
-      return pa !== null
-        ? `${head}\n\n플레이오토 실재고를 ${UI.num(counted)}개로 바꿉니다.\n재고실사 뒤에 팔리거나 들어온 수량은 보낼 때 자동으로 맞춥니다. 반영할까요?`
-        : `${head}\n\n플레이오토 실재고를 ${UI.num(counted)}개로 바꿉니다. 반영할까요?`;
+      return `${head}\n\nMOPS 장부 실재고를 ${UI.num(counted)}개로 맞춥니다. 재고실사 뒤 팔리거나 들어온 수량은 그대로 유지됩니다. 반영할까요?`;
     }
     if (decision === 'rejected') return `${head}\n\n반영하지 않고 닫을까요?`;
     return '';
@@ -359,7 +327,7 @@
 
     state.memos.delete(id);
     const item = applyItem(id, res && res.item);
-    if (decision === 'applied') { toastPlayauto(item); autoSoldout(item || r); }
+    if (decision === 'applied') { toastApply(item); autoSoldout(item || r); }
     else if (decision === 'rejected') UI.toast('미반영으로 닫았습니다', 'info');
     else if (decision === 'held') UI.toast('보류로 표시했습니다', 'info');
     else UI.toast('대기 상태로 되돌렸습니다', 'info');
@@ -397,19 +365,20 @@
     }
   }
 
-  function toastPlayauto(item) {
+  // 서버가 MOPS 장부 반영 결과(완료/실패)를 바로 돌려준다.
+  function toastApply(item) {
     const status = item ? item.playauto_status : '';
-    if (status === 'sent') UI.toast('반영했습니다 · 플레이오토 전송 완료', 'ok');
-    else if (status === 'failed') UI.toast(`반영으로 기록했지만 플레이오토 전송에 실패했습니다: ${item.playauto_message || ''}`, 'error');
-    else UI.toast(`반영으로 기록했습니다 · 플레이오토 전송 대기${item && item.playauto_message ? ` (${item.playauto_message})` : ''}`, 'info');
+    if (status === 'sent') UI.toast(`반영했습니다 · MOPS 반영 완료${item.playauto_message ? ` (${item.playauto_message})` : ''}`, 'ok');
+    else if (status === 'failed') UI.toast(`반영으로 기록했지만 MOPS 장부 반영에 실패했습니다: ${item.playauto_message || ''}`, 'error');
+    else UI.toast(`반영으로 기록했습니다 · MOPS 반영 대기${item && item.playauto_message ? ` (${item.playauto_message})` : ''}`, 'info');
   }
 
   async function resend(btn, r) {
     const id = String(r.id);
-    if (!(await UI.confirm(`${r.item_name || r.item_code}\n플레이오토 실재고를 ${UI.num(numOrNull(r.counted_qty))}개로 다시 전송할까요?`))) return;
+    if (!(await UI.confirm(`${r.item_name || r.item_code}\nMOPS 장부 실재고를 ${UI.num(numOrNull(r.counted_qty))}개로 맞춥니다. 재고실사 뒤 팔리거나 들어온 수량은 그대로 유지됩니다. 다시 반영할까요?`))) return;
     const res = await UI.busy(btn, () => UI.api.post('/stock_reviews/send', { id: r.id }));
     if (res === undefined) return;
-    toastPlayauto(applyItem(id, res && res.item));
+    toastApply(applyItem(id, res && res.item));
   }
 
   /* ---------- events ---------- */

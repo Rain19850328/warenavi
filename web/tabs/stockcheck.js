@@ -211,20 +211,20 @@
     return Number.isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   }
 
-  // 서버가 플레이오토 현재 재고와 비교해 판정을 바꿨으면 알려 준다.
+  // 서버가 MOPS 장부 실재고와 비교해 판정을 바꿨으면 알려 준다(돌려받은 줄의 live_stock이 그 값).
   function toastLive(res, asked) {
-    const live = res && res.live;
     const item = res && res.item;
-    if (!live || !item) return;
-    if (live.stock === null || live.stock === undefined) {
-      UI.toast(`플레이오토 재고를 읽지 못해 총 재고 기준으로 기록했습니다${live.message ? ` (${live.message})` : ''}`, 'info');
+    if (!item || !Object.prototype.hasOwnProperty.call(item, 'live_stock')) return;
+    const stock = numOrNull(item.live_stock);
+    if (stock === null) {
+      UI.toast('이 상품은 MOPS 장부에 없어 장부와 비교하지 않고 기록했습니다', 'info');
       return;
     }
-    const n = UI.num(live.stock);
+    const n = UI.num(stock);
     if (asked === 'match' && item.status === 'mismatch') {
-      UI.toast(`플레이오토 재고 ${n}개와 달라 불일치로 기록했습니다 · 실사반영으로 넘어갑니다`, 'info');
+      UI.toast(`MOPS 장부 실재고 ${n}개와 달라 불일치로 기록했습니다 · 실사반영으로 넘어갑니다`, 'info');
     } else if (asked === 'mismatch' && item.status === 'match') {
-      UI.toast(`플레이오토 재고 ${n}개와 같아 일치로 기록했습니다`, 'ok');
+      UI.toast(`MOPS 장부 실재고 ${n}개와 같아 일치로 기록했습니다`, 'ok');
     }
   }
 
@@ -242,9 +242,9 @@
     if (r.status !== 'pending' && liveNow !== null && total !== null && liveNow !== total) {
       parts.push(`<span class="sc-side-sub">현재 ${esc(UI.num(liveNow))}</span>`);
     }
-    // 진열보충 요청 · 일치/불일치 기록 때 조회한 플레이오토 재고(판정은 이 값과 비교한다)
+    // 진열보충 요청 · 일치/불일치 기록 때 읽은 MOPS 장부 실재고(판정은 이 값과 비교한다)
     const pa = numOrNull(r.live_stock);
-    if (pa !== null) parts.push(`<span class="sc-side-sub sc-live">플레이오토 ${esc(UI.num(pa))}${r.live_stock_at ? ` · ${esc(hhmm(r.live_stock_at))}` : ''}</span>`);
+    if (pa !== null) parts.push(`<span class="sc-side-sub sc-live">MOPS ${esc(UI.num(pa))}${r.live_stock_at ? ` · ${esc(hhmm(r.live_stock_at))}` : ''}</span>`);
     if (r.status === 'match' || r.status === 'mismatch') {
       parts.push(UI.chip(r.status === 'match' ? '일치' : '불일치', r.status === 'match' ? 'ok' : 'danger'));
       if (r.status === 'mismatch' && r.resolved) parts.push(UI.chip('처리완료', 'ok'));
@@ -379,8 +379,8 @@
     } else if (r.status === 'match') {
       out.push('<button type="button" class="btn-ghost btn-sm" data-act="reset">다시 확인</button>');
     } else if (r.playauto_status === 'sent') {
-      // 플레이오토로 보낸 재고는 되돌릴 수 없다(처리취소·수정·다시 확인 모두 막힘).
-      out.push(UI.chip('플레이오토 전송 완료', 'ok'));
+      // MOPS 장부에 반영된 재고는 되돌릴 수 없다(처리취소·수정·다시 확인 모두 막힘).
+      out.push(UI.chip('MOPS 반영 완료', 'ok'));
     } else if (r.resolved) {
       // 실사반영에서 판단이 끝난 건. 판단은 실사반영 탭에서만 바꾼다.
     } else {
@@ -715,7 +715,7 @@
         return;
       case 'match':
       {
-        // 일치 = 화면에 보이는 총 재고만큼 있었다는 뜻. 서버가 플레이오토 현재 재고와 다시 비교한다.
+        // 일치 = 화면에 보이는 총 재고만큼 있었다는 뜻. 서버가 MOPS 장부 실재고와 다시 비교한다.
         const res = await write(btn, '/stock_checks/record', { id: r.id, result: 'match', counted_qty: totalStock(r) });
         if (res) { toastLive(res, 'match'); await autoSoldout(id); }
       }

@@ -111,9 +111,10 @@
       return ['실사반영', tone, 'stockcheck',
         joinParts([`${label}: DB ${count(d.db_stock)} / 실재고 ${count(d.counted_qty)}`, d.note])];
     },
+    // 키 이름은 예전 그대로(stock_check_playauto)지만 지금은 MOPS 장부 반영 결과를 남긴다.
     stock_check_playauto: d => {
       const status = text(d.status);
-      const label = { sent: '플레이오토 전송 완료', failed: '플레이오토 전송 실패', pending: '플레이오토 전송 대기' }[status] || status;
+      const label = { sent: 'MOPS 반영 완료', failed: 'MOPS 반영 실패', pending: 'MOPS 반영 대기' }[status] || status;
       const tone = { sent: 'ok', failed: 'danger', pending: 'warn' }[status] || 'muted';
       return ['실사반영', tone, 'stockcheck', joinParts([`${label} (실재고 ${count(d.counted_qty)})`, d.message])];
     },
