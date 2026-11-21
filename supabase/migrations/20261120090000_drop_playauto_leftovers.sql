@@ -515,11 +515,33 @@ begin
     raise exception 'public 함수에 옛 이름(playauto)이 남아 있습니다';
   end if;
 
+  -- 칸 검사는 이번에 이름을 바꾼 확인요청 표만 본다(다른 표는 MOPS 등 다른 프로그램 소관이라 건드리지 않는다).
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'warehouse_stock_check_requests'
+      and column_name like 'playauto%'
+  ) then
+    raise exception '확인요청 표에 옛 칸 이름(playauto*)이 남아 있습니다';
+  end if;
+
+  if (
+    select count(*) from information_schema.columns
+    where table_schema = 'public' and table_name = 'warehouse_stock_check_requests'
+      and column_name in ('mops_status', 'mops_applied_at', 'mops_message')
+  ) <> 3 then
+    raise exception '확인요청 표에 mops_status · mops_applied_at · mops_message 칸이 다 있지 않습니다';
+  end if;
+
+  -- 다른 표에 남은 같은 접두 칸은 배포 기록에 이름만 남긴다.
   if exists (
     select 1 from information_schema.columns
     where table_schema = 'public' and column_name like 'playauto%'
   ) then
-    raise exception 'public 표에 옛 칸 이름(playauto*)이 남아 있습니다';
+    raise notice '다른 표에 남은 playauto* 칸(이번 정리 대상 아님): %', (
+      select string_agg(table_name || '.' || column_name, ', ' order by table_name, column_name)
+      from information_schema.columns
+      where table_schema = 'public' and column_name like 'playauto%'
+    );
   end if;
 
   if to_regclass('public.warehouse_playauto_usage') is not null then
