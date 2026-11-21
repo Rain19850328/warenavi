@@ -378,7 +378,7 @@
       out.push(`<button type="button" class="btn-danger sc-act-main" data-act="open-mismatch"${formKind === 'mismatch' ? ' disabled' : ''}>불일치</button>`);
     } else if (r.status === 'match') {
       out.push('<button type="button" class="btn-ghost btn-sm" data-act="reset">다시 확인</button>');
-    } else if (r.playauto_status === 'sent') {
+    } else if (r.mops_status === 'sent') {
       // MOPS 장부에 반영된 재고는 되돌릴 수 없다(처리취소·수정·다시 확인 모두 막힘).
       out.push(UI.chip('MOPS 반영 완료', 'ok'));
     } else if (r.resolved) {

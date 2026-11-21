@@ -80,6 +80,14 @@
     return Object.prototype.hasOwnProperty.call(ROLE_LABELS, key) ? ROLE_LABELS[key] : key;
   }
 
+  // 실사반영 결과(MOPS 장부 반영 완료/실패/대기) 기록을 보여 주는 모양.
+  function stockCheckMopsAction(d) {
+    const status = text(d.status);
+    const label = { sent: 'MOPS 반영 완료', failed: 'MOPS 반영 실패', pending: 'MOPS 반영 대기' }[status] || status;
+    const tone = { sent: 'ok', failed: 'danger', pending: 'warn' }[status] || 'muted';
+    return ['실사반영', tone, 'stockcheck', joinParts([`${label} (실재고 ${count(d.counted_qty)})`, d.message])];
+  }
+
   const ACTIONS = {
     item_update: d => {
       const changes = Array.isArray(d.changes) ? d.changes.filter(c => c && typeof c === 'object') : [];
@@ -111,13 +119,10 @@
       return ['실사반영', tone, 'stockcheck',
         joinParts([`${label}: DB ${count(d.db_stock)} / 실재고 ${count(d.counted_qty)}`, d.note])];
     },
-    // 키 이름은 예전 그대로(stock_check_playauto)지만 지금은 MOPS 장부 반영 결과를 남긴다.
-    stock_check_playauto: d => {
-      const status = text(d.status);
-      const label = { sent: 'MOPS 반영 완료', failed: 'MOPS 반영 실패', pending: 'MOPS 반영 대기' }[status] || status;
-      const tone = { sent: 'ok', failed: 'danger', pending: 'warn' }[status] || 'muted';
-      return ['실사반영', tone, 'stockcheck', joinParts([`${label} (실재고 ${count(d.counted_qty)})`, d.message])];
-    },
+    // MOPS 장부 반영 결과.
+    stock_check_mops: stockCheckMopsAction,
+    // 옛 기록(2026-11-20 이전)은 action 이 stock_check_playauto 로 남아 있어 같은 모양으로 보여 준다.
+    stock_check_playauto: stockCheckMopsAction,
     display_request: d => ['진열보충', 'info', 'display', joinParts(['진열 요청', d.note])],
     display_done: d => ['진열보충', 'ok', 'display', joinParts(['진열 완료', d.rack_code ? `${text(d.rack_code)}에서 ${count(d.qty)}개 차감` : ''])],
     display_reopen: d => ['진열보충', 'warn', 'display', joinParts(['완료 취소', d.rack_code ? `${text(d.rack_code)}에 ${count(d.qty)}개 되돌림` : ''])],

@@ -976,9 +976,9 @@ Deno.serve(async (req) => {
         p_actor_name: auth.name,
       }) as { item?: Record<string, unknown> };
       // 반영이면 판단을 먼저 남기고 센 수량을 MOPS 장부에 반영한다. 반영이 실패해도 판단은 남고, 화면에서 다시 반영할 수 있다.
-      // (playauto_status 는 반영 결과를 담는 DB 칸 이름이다. 'sent' = 장부에 반영 완료)
+      // (mops_status 는 반영 결과를 담는 DB 칸 이름이다. 'sent' = 장부에 반영 완료)
       const item = decided?.item;
-      if (decision !== "applied" || !item || item.playauto_status === "sent") return json(req, decided);
+      if (decision !== "applied" || !item || item.mops_status === "sent") return json(req, decided);
       return json(
         req,
         await callRpc("warehouse_apply_count_to_mops", {
@@ -997,7 +997,7 @@ Deno.serve(async (req) => {
       const item = await callRpc("warehouse_get_stock_check_item", { p_id: id }) as Record<string, unknown> | null;
       if (!item) throw new Error("실사반영 항목을 찾을 수 없습니다.");
       if (item.review_status !== "applied") throw new Error("반영으로 판단한 항목만 MOPS 장부에 반영할 수 있습니다.");
-      if (item.playauto_status === "sent") throw new Error("이미 MOPS 장부에 반영된 건입니다.");
+      if (item.mops_status === "sent") throw new Error("이미 MOPS 장부에 반영된 건입니다.");
       return json(
         req,
         await callRpc("warehouse_apply_count_to_mops", {

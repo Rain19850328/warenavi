@@ -60,7 +60,7 @@
     held: { label: '보류', tone: 'warn' },
     rejected: { label: '미반영', tone: 'muted' },
   };
-  const PLAYAUTO = {
+  const MOPS_STATUS = {
     pending: ['MOPS 반영 대기', 'warn'],
     sent: ['MOPS 반영 완료', 'ok'],
     failed: ['MOPS 반영 실패', 'danger'],
@@ -155,7 +155,7 @@
   function actionsHtml(r) {
     const id = String(r.id);
     if (isDecided(r)) {
-      if (r.playauto_status === 'sent') return '';   // MOPS 장부에 반영된 재고는 여기서 되돌릴 수 없다
+      if (r.mops_status === 'sent') return '';   // MOPS 장부에 반영된 재고는 여기서 되돌릴 수 없다
       const resend = r.review_status === 'applied'
         ? '<button type="button" class="btn-primary" data-act="send">다시 반영</button>'
         : '';
@@ -178,7 +178,7 @@
     if (isDecided(r)) cls.push('is-done');
 
     const chips = [];
-    const pa = PLAYAUTO[r.playauto_status];
+    const pa = MOPS_STATUS[r.mops_status];
     if (pa) chips.push(UI.chip(pa[0], pa[1]));
     const stateChip = `<span class="rv-state-chip">${decision ? UI.chip(decision.label, decision.tone) : UI.chip('대기', 'warn')}</span>`;
 
@@ -190,8 +190,8 @@
       const text = [decision.label, who, isDecided(r) ? r.review_note : ''].filter(Boolean).join(' — ');
       notes.push(`<div class="rv-note">${esc(text)}</div>`);
     }
-    if (r.playauto_status && r.playauto_message) {
-      notes.push(`<div class="rv-note${r.playauto_status === 'sent' ? '' : ' rv-note--reason'}">MOPS: ${esc(r.playauto_message)}</div>`);
+    if (r.mops_status && r.mops_message) {
+      notes.push(`<div class="rv-note${r.mops_status === 'sent' ? '' : ' rv-note--reason'}">MOPS: ${esc(r.mops_message)}</div>`);
     }
     const checked = [r.checked_by_name, UI.fmtDateTime(r.checked_at)].filter(Boolean).join(' · ');
 
@@ -367,10 +367,10 @@
 
   // 서버가 MOPS 장부 반영 결과(완료/실패)를 바로 돌려준다.
   function toastApply(item) {
-    const status = item ? item.playauto_status : '';
-    if (status === 'sent') UI.toast(`반영했습니다 · MOPS 반영 완료${item.playauto_message ? ` (${item.playauto_message})` : ''}`, 'ok');
-    else if (status === 'failed') UI.toast(`반영으로 기록했지만 MOPS 장부 반영에 실패했습니다: ${item.playauto_message || ''}`, 'error');
-    else UI.toast(`반영으로 기록했습니다 · MOPS 반영 대기${item && item.playauto_message ? ` (${item.playauto_message})` : ''}`, 'info');
+    const status = item ? item.mops_status : '';
+    if (status === 'sent') UI.toast(`반영했습니다 · MOPS 반영 완료${item.mops_message ? ` (${item.mops_message})` : ''}`, 'ok');
+    else if (status === 'failed') UI.toast(`반영으로 기록했지만 MOPS 장부 반영에 실패했습니다: ${item.mops_message || ''}`, 'error');
+    else UI.toast(`반영으로 기록했습니다 · MOPS 반영 대기${item && item.mops_message ? ` (${item.mops_message})` : ''}`, 'info');
   }
 
   async function resend(btn, r) {
