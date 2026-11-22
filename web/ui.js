@@ -142,13 +142,15 @@
   //   구역(SR1/SR2 …)은 선택 상자로 고르고, 옆 칸에는 뒤쪽만 친다. 숫자는 두 자리마다 '-'를 넣는다(0502 → 05-02).
   //   SR2의 정식 표기는 글자-숫자(SR2-A-01)라서 A~F 글자로 시작하는 뒤쪽은 그대로 살린다.
   //   사진으로 읽었거나 붙여 넣은 전체 코드(SR3-10-01, SR-02-A-01)는 구역과 뒤쪽으로 나눈다.
+  //   한글 자판 상태로 친 글자(ㅠ 등)는 같은 자리의 영문(B 등)으로 바꾼다. 글자로 시작하는 뒤쪽은 SR2 자리다.
   const RACK_ZONES = ['SR1', 'SR2'];
+  const HANGUL_KEYS = { 'ㅁ': 'A', 'ㅠ': 'B', 'ㅊ': 'C', 'ㅇ': 'D', 'ㄷ': 'E', 'ㄹ': 'F' };   // 두벌식 자판 위치
   function splitRackCode(value) {
-    const v = String(value || '').toUpperCase().replace(/\s+/g, '');
+    const v = String(value || '').replace(/[ㅁㅠㅊㅇㄷㄹ]/g, ch => HANGUL_KEYS[ch]).toUpperCase().replace(/\s+/g, '');
     const m = /^SR-?(\d{1,2})(?:-(.*))?$/.exec(v);
-    const zone = m ? `SR${Number(m[1])}` : '';
     const raw = m ? (m[2] || '') : v;
     const letter = /^[A-F]/.test(raw) ? raw[0] : '';
+    const zone = m ? `SR${Number(m[1])}` : (letter ? 'SR2' : '');
     const digits = raw.replace(/\D/g, '').slice(0, 4);
     const rest = letter
       ? (digits ? `${letter}-${digits.slice(0, 2)}` : letter)
@@ -167,9 +169,14 @@
     return parts;
   }
   // 입력 칸에서 전체 렉 코드를 읽는다. 뒤쪽을 끝까지 적지 않았으면 ''.
+  //   읽기 전에 칸을 한 번 정리한다(한글 조합 중이라 정리를 건너뛴 값도 여기서 맞춘다).
+  //   글자 뒤쪽(B-05)은 SR2에서만 쓰는 모양이라 구역이 SR2일 때만 완성으로 본다.
   function readRackCode(form) {
-    const rest = splitRackCode(form.elements.rack.value).rest;
-    return /^(\d{2}-\d{2}|[A-F]-\d{2})$/.test(rest) ? `${form.elements.zone.value}-${rest}` : '';
+    const rest = applyRackCode(form, form.elements.rack.value).rest;
+    const zone = form.elements.zone.value;
+    if (/^\d{2}-\d{2}$/.test(rest)) return `${zone}-${rest}`;
+    if (/^[A-F]-\d{2}$/.test(rest) && zone === 'SR2') return `${zone}-${rest}`;
+    return '';
   }
 
   function rackChips(racks) {

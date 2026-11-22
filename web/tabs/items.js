@@ -538,7 +538,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
           <div class="ti-rack-code">
             <select id="tiRackZone" name="zone" aria-label="렉 구역">${zones.map(z =>
               `<option value="${z}"${z === init.zone ? ' selected' : ''}>${z}</option>`).join('')}</select>
-            <input id="tiRackCode" name="rack" type="text" inputmode="numeric" autocomplete="off" placeholder="예: 05-02" value="${esc(init.rest)}" />
+            <input id="tiRackCode" name="rack" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" placeholder="예: 05-02 / B-05" value="${esc(init.rest)}" />
             <button type="button" class="btn-sm" data-scan-for="#tiRackCode" title="사진으로 렉 코드 읽기" aria-label="사진으로 렉 코드 읽기">📷</button>
           </div>
         </div>
@@ -1118,6 +1118,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       return;
     }
     if (target.id === 'tiRackCode') {   // 직접 입력했거나 사진으로 읽은 렉 코드
+      if (ev.isComposing) return;       // 한글 조합 중에는 값을 덮어쓰지 않는다(조합이 끝나면 onCompositionEnd가 정리)
       const form = target.closest('form');
       if (form) { UI.rackCode.apply(form, target.value); syncRackForm(form); }
       return;
@@ -1126,6 +1127,11 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
       const form = target.closest('form[data-form="edit"]');
       if (form && state.item) showErrors(form, collectPatch(form, state.item).errors);
     }
+  }
+
+  // 한글 자판으로 친 렉 코드: 조합이 끝난 뒤 한 번 정리한다.
+  function onCompositionEnd(ev) {
+    if (ev.target.id === 'tiRackCode') onInput({ target: ev.target });
   }
 
   function onChange(ev) {
@@ -1170,6 +1176,7 @@ body:has(#view-items:not([hidden]) .ti-edit-btns) .toast-host{ bottom: calc(var(
     root.addEventListener('click', onClick);
     root.addEventListener('submit', onSubmit);
     root.addEventListener('input', onInput);
+    root.addEventListener('compositionend', onCompositionEnd);
     root.addEventListener('change', onChange);
     root.addEventListener('keydown', onKeydown);
     window.addEventListener('shell:counts', refreshTodo);

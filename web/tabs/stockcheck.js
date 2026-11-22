@@ -333,7 +333,7 @@
           <div class="field"><span>입고할 위치 (렉 코드)</span>
             <div class="sc-rack-code">
               <select name="zone" aria-label="렉 구역">${UI.rackCode.zones.map(z => `<option value="${z}">${z}</option>`).join('')}</select>
-              <input class="sc-rack-code-input" name="rack" type="text" inputmode="numeric" autocomplete="off" placeholder="예: 05-02" aria-label="렉 번호" />
+              <input class="sc-rack-code-input" name="rack" type="text" inputmode="text" autocapitalize="characters" autocomplete="off" placeholder="예: 05-02 / B-05" aria-label="렉 번호" />
               <button type="button" class="btn-sm" data-scan-for=".sc-rack-code-input" title="사진으로 렉 코드 읽기" aria-label="사진으로 렉 코드 읽기">📷</button>
             </div>
           </div>
@@ -787,6 +787,7 @@
 
   function onInput(ev) {
     if (ev.target.classList && ev.target.classList.contains('sc-rack-code-input')) {   // 직접 입력했거나 사진으로 읽은 렉 코드
+      if (ev.isComposing) return;       // 한글 조합 중에는 값을 덮어쓰지 않는다(조합이 끝나면 onCompositionEnd가 정리)
       const form = ev.target.closest('form');
       if (form) { UI.rackCode.apply(form, ev.target.value); syncRackForm(form); }
       return;
@@ -799,6 +800,11 @@
       if (q === state.filter.q) return;
       changeFilter(() => { state.filter.q = q; });
     }, 150);
+  }
+
+  // 한글 자판으로 친 렉 코드: 조합이 끝난 뒤 한 번 정리한다.
+  function onCompositionEnd(ev) {
+    if (ev.target.classList && ev.target.classList.contains('sc-rack-code-input')) onInput({ target: ev.target });
   }
 
   function onChange(ev) {
@@ -839,6 +845,7 @@
     root.addEventListener('click', onClick);
     root.addEventListener('submit', onSubmit);
     root.addEventListener('input', onInput);
+    root.addEventListener('compositionend', onCompositionEnd);
     root.addEventListener('change', onChange);
     syncToolbar();
   }
